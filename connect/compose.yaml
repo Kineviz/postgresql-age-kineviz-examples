@@ -1,0 +1,20 @@
+services:
+  proxy:
+    build:
+      context: .
+      dockerfile: connect/proxy/Dockerfile
+    environment:
+      KINEVIZ_PASSWORD: ${KINEVIZ_PASSWORD:?Run ./gxr up first}
+      API_KEY: ${PROXY_API_KEY:?Run ./gxr connect up first}
+      ADMIN_PASSWORD: ${PROXY_ADMIN_PASSWORD:?Run ./gxr connect up first}
+    ports:
+      - "127.0.0.1:${PROXY_PORT:-9081}:9080"
+    volumes:
+      - age-proxy-config:/app/config
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9080/health', timeout=3)"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+volumes:
+  age-proxy-config:

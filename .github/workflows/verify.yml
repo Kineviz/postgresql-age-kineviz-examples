@@ -18,10 +18,11 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run typecheck && npm test
       - run: npm run test:integration
+      - run: npm run test:proxy
       - run: npm run test:stream
       - name: Database logs on failure
         if: failure()
-        run: docker compose -f compose.yaml -f streaming/compose.yaml logs --tail 100
+        run: docker compose -f compose.yaml -f streaming/compose.yaml -f connect/compose.yaml logs --tail 100
       - name: Stop the disposable CI deployment
         if: always()
-        run: docker compose -f compose.yaml -f streaming/compose.yaml down --volumes
+        run: docker compose -f compose.yaml -f streaming/compose.yaml -f connect/compose.yaml down --volumes

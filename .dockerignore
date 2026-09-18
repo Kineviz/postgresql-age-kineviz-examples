@@ -5,3 +5,8 @@
 !src/**
 !streaming
 !streaming/**
+!connect
+!connect/proxy
+!connect/proxy/**
+**/__pycache__
+**/*.pyc

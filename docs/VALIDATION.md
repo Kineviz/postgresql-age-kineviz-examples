@@ -17,7 +17,7 @@ Verified locally on **2026-09-18**, using Docker Desktop on ARM64:
 | Repeated setup | Existing graph counts preserved |
 | CSV exports | Counts match; every edge endpoint exists in exported nodes |
 | Reader connection | Single SELECT with real username/password succeeds without separate session setup |
-| Reader writes | SQL and Cypher writes rejected; disabling the role's read-only default still leaves table writes denied |
+| Reader INSERT/DELETE | SQL and Cypher CREATE rejected; disabling the role's read-only default still leaves direct table writes denied |
 | Failed setup transaction | New graph creation rolled back with the transaction |
 | Replay MERGE | Applying one transaction twice produces one vertex and two edges |
 | Kafka full replay | 12,033 unique transactions landed; every vertex, edge, endpoint, and property matches the batch fixture |
@@ -34,7 +34,7 @@ npm run test:integration
 npm run test:stream
 ```
 
-The integration suite exercises PostgreSQL sessions equivalent to the Kineviz SQL
+The original integration suite exercises PostgreSQL sessions equivalent to the Kineviz SQL
 backend and validates the exact query files. **The Kineviz desktop UI and its
 Mapping Editor were not exercised in this validation.** Mapping instructions
 are provided separately. The original Spanner project archive and dashboard are
@@ -43,3 +43,41 @@ not included as AGE-compatible assets.
 Local evidence above is ARM64. The GitHub Actions workflow also runs these checks
 on Ubuntu; consult its result for the committed revision rather than assuming
 that a local pass proves every platform.
+
+## Database Proxy connection (2026-09-18)
+
+The connection follows the Spanner Omni example: pinned upstream proxy,
+drop-in driver, one-command registration, test/schema/query checks, and a
+Database Proxy API URL. Upstream commit: `6229afd57ef71ce662a90caef25ebccc101f0915`.
+Dependencies are pinned in `connect/proxy/requirements.lock`.
+
+The proxy suite exercises every demo over real HTTP with the actual reader:
+
+- Catalog labels and relationship endpoint categories.
+- Nodes, edges, paths, nested entity lists/maps, and scalar tables.
+- Exact graph IDs, including strings in Kineviz's internal-ID predicates.
+- Endpoint completion for edge-only results.
+- Category/relationship pulls, excluding already-loaded items.
+- Incoming/outgoing/undirected expansion, one and two hops, relationship filters,
+  hidden types, excluded IDs, and edges between selected nodes.
+- All six ready-to-paste graph query files.
+- Query errors, write rejection, API/admin authentication separation, browser
+  private-network preflight, and connection cleanup after repeated requests.
+
+The current Kineviz source adapter was also exercised directly against the
+running proxy: connection probe, normalized schema, graph query, category pull,
+two-hop expansion and selected-node edge expansion succeeded. This is a source
+adapter integration check, **not a rendered Desktop UI test**.
+
+One existing Kineviz helper remains a limitation: its legacy internal-relationship
+query combines a directed edge pattern with `ID(n) < ID(m)`, which omits edges
+whose source has a larger ID. The proxy preserves the meaning of that query.
+Use normal expansion, the proxy's `onlyBetweenSelected` expansion intent, or an
+explicit Cypher query without that ordering predicate for all edges among a
+selection. The examples repository does not change Kineviz application code.
+
+AGE 1.6's `SET` operation was observed to bypass the reader session's read-only
+preference. A test added one temporary property to one synthetic fixture node;
+it was removed and absence verified. The driver now rejects mutation/procedure
+clauses before execution, and tests cover that guard. This corrects the broader
+read-only claim in the original verification record.

@@ -31,8 +31,17 @@ and initialize the session. The bundled deployment handles this automatically.
 See [connect/README.md](../connect/README.md).
 
 **Kineviz rejects PostgreSQL version / asks for `GRAPH_TABLE`:** the selected
-connector is the SQL/PGQ property-graph connector. For AGE use the PostgreSQL
-option in **Query → SQL**, then Mapping Editor.
+connector is the SQL/PGQ property-graph connector. For AGE run `./gxr connect up
+<demo>` and choose **Database Proxy**. See [connect](../connect/README.md).
+
+**Host not allowed in Query → SQL:** the SQL backend rejected the host against
+its allowlist before database authentication. The Database Proxy route above is
+a separate transport. For SQL, an administrator must allow the specific host;
+the Server field must include the port, for example `127.0.0.1:5455`.
+
+**Proxy connection fails:** run `./gxr connect status <demo>`. Confirm the URL
+uses port 9081 (or `PROXY_PORT`) and the API key is `PROXY_API_KEY`. See the
+[proxy troubleshooting guide](../connect/README.md#troubleshooting-the-connection).
 
 **No rows after `LOAD; SET; SELECT` in a GUI:** the client may only handle one
 result object. Use per-session server initialization and a single SELECT, as
@@ -50,6 +59,6 @@ than skipping offsets. `./gxr stream up` starts stopped services without clearin
 the graph, Kafka log, or receipts. It can replay a completed producer again;
 receipts prevent duplicate graph writes.
 
-**Stopping everything:** run `./gxr stream down` before `./gxr db stop`. These
+**Stopping everything:** run `./gxr connect down` and `./gxr stream down` before `./gxr db stop`. These
 commands keep both data volumes. There is intentionally no automatic whole-volume
 destroy command in the demo CLI.

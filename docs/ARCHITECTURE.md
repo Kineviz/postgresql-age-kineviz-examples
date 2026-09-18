@@ -5,7 +5,9 @@ flowchart LR
   G[Seeded fixture generators] --> A[TypeScript data adapter]
   A --> P[PostgreSQL + AGE]
   Q[SQL wrapping openCypher] --> P
-  P --> K[Kineviz SQL Mapping Editor]
+  P --> X[Kineviz database proxy + AGE driver]
+  X --> K[Kineviz graph canvas]
+  P --> T[Optional SQL Mapping Editor]
   P --> C[CSV snapshot]
   G --> R[Payment replay]
   R --> B[Kafka]
@@ -15,7 +17,8 @@ flowchart LR
 
 All three batch graphs share the `kineviz` database but occupy separate AGE
 schemas. `_key` is the stable external identity used by the importer and exports;
-AGE's internal graph IDs remain implementation details. Vertex keys include
+The proxy uses AGE's internal graph IDs as exact decimal strings for live
+expansion; these are not portable across a graph drop/reload. Vertex keys include
 their category to avoid collisions between different entity types. Transfer
 edges carry independent keys, so parallel payments survive.
 
@@ -26,7 +29,9 @@ Each graph setup is one transaction, including its registry entry and reader
 grants. Failure rolls back the complete graph. The registry records expected
 counts; verification also runs the investigative queries and fixture assertions.
 
-GIN property indexes support endpoint matching. Batch loading is deliberately
+GIN property indexes support fixture key matching. `connect up` also adds
+B-tree indexes on label IDs and edge endpoints, then analyzes those labels so
+canvas traversal queries can use them. Batch loading is deliberately
 simple and intended for these demo sizes, not a production ingestion benchmark.
 For much larger graphs, evaluate AGE's documented file loader and indexes against
 your version and data types. The CLI serializes setup: don't run separate `up`
@@ -59,6 +64,11 @@ observed server and extension versions.
 - Use `*1..4` for bounded variable-length Cypher traversal.
 - Filter `type(edge) IN [...]` when matching several relationship labels; the
   pinned release does not accept `[:TYPE_A|TYPE_B]` alternation syntax.
+- AGE 1.6 can execute `SET` against an existing node despite the reader session's
+  read-only setting. The proxy additionally rejects mutation/procedure clauses
+  before execution. Do not treat a read-only preference alone as an AGE write guard.
+- SQL casts of `graphid` go through `text` before `bigint`; graph IDs and integers
+  beyond JavaScript's safe integer range are transmitted as strings.
 - AGE properties are flexible maps. Labels have backing tables and are not
   Spanner dynamic labels; SQL/PGQ and Spanner GQL are different query languages.
 

@@ -1,5 +1,6 @@
 .env
 node_modules/
+node_modules
 .generated/
 exports/
 *.log

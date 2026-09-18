@@ -7,7 +7,7 @@ An account can look ordinary while its identity and payment paths reveal a wider
 ```bash
 ./gxr up paysim-schemaless
 ./gxr verify paysim-schemaless
-./gxr connect paysim-schemaless
+./gxr connect up paysim-schemaless
 ./gxr export paysim-schemaless
 ```
 
@@ -34,7 +34,7 @@ AGE stores flexible property maps and creates backing tables for labels. The inh
 
 The analytical files return tables. Their `canvas/` counterparts return flat
 source/target columns for Kineviz Mapping Editor and limit output to 500 rows.
-Use [the connection guide](../../connect/README.md) to map them. The CSV export
+Use [the optional SQL route](../../connect/SQL.md) to map them. The CSV export
 includes the complete graph as well as these smaller result sets.
 
 ## Verification and lifecycle
@@ -45,3 +45,10 @@ All eight query files must return results, and total graph counts must match the
 registered seed. Repeating `up` preserves the graph. To deliberately recreate
 this demo, run `./gxr down paysim-schemaless --yes` followed by `./gxr up paysim-schemaless`.
 Other graphs are preserved. `./gxr db stop` keeps the database volume.
+
+## Live graph queries
+
+Use Database Proxy as described in the [connection guide](../../connect/README.md).
+Paste the Cypher files in [`queries/graph/`](queries/graph/) into Kineviz's
+**Query** tab. They return nodes, edges and paths directly; the SQL files remain
+available for tables and manual mapping.

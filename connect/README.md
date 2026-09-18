@@ -1,56 +1,208 @@
-# Connect PostgreSQL + AGE to Kineviz
+# Connect Kineviz to PostgreSQL + Apache AGE
 
-Use **Query → SQL → PostgreSQL** for live tabular results, or import CSV for a
-snapshot. The SQL panel requires you to map result columns to nodes and edges.
-This route does not add automatic AGE graph-schema discovery or Cypher expansion
-to Kineviz's native graph database connectors.
+Following the [Spanner Omni connect example](https://github.com/Kineviz/spanner-omni-kineviz-examples/tree/main/connect),
+this directory provides a live **Database Proxy** route and a CSV snapshot route.
+Kineviz was formerly named GraphXR; the proxy repository retains that name.
 
-## Run a demo
+| Route | Result | Use it for |
+|---|---|---|
+| A — Database Proxy | Live Cypher, graph schema, nodes and edges, neighborhood expansion | Exploring and querying repeatedly |
+| B — CSV export | A snapshot with explicit mappings | Offline sharing and one-off imports |
+
+Kineviz's **PostgreSQL SQL/PGQ** option uses a different graph interface. Choose
+**Database Proxy** for this setup. No new dropdown entry or Kineviz rebuild is
+required for a client supporting the proxy's typed graph operations.
+
+## Route A — live graph through Database Proxy
+
+### Run a demo and start its connection
+
+From the repository root, with Docker running:
 
 ```bash
-./gxr up fraud-rings
-./gxr connect fraud-rings
+./gxr up paysim-schemaless
+./gxr connect up paysim-schemaless
 ```
 
-Create or open a Kineviz project. In the SQL query panel, select PostgreSQL:
+The second command:
 
-| Field | Local demo value |
+1. Builds the upstream Kineviz database proxy at commit
+   `6229afd57ef71ce662a90caef25ebccc101f0915` with the drop-in AGE driver in
+   [`proxy/age_driver.py`](proxy/age_driver.py).
+2. Starts only the proxy, published on **127.0.0.1:9081**. PostgreSQL remains
+   on **127.0.0.1:5455**. The two containers communicate over the Compose network.
+3. Adds ID and endpoint indexes to owned demo labels for canvas traversals,
+   then registers the graph without replacing an existing registration.
+4. Verifies `/test`, `/graphSchema`, and a real graph query before printing the URL.
+
+Docker packages the Python driver and upstream dependencies; no host virtualenv
+or proxy frontend build is needed. The first build needs network access.
+Subsequent builds reuse Docker's cache. Dependency versions are recorded in
+[`proxy/requirements.lock`](proxy/requirements.lock). The driver registration is applied to the
+pinned checkout inside the image, not to another local proxy installation.
+
+`connect up` adds random `PROXY_API_KEY` and `PROXY_ADMIN_PASSWORD` values to
+`.env` when absent. Existing passwords are preserved. Database credentials stay
+in the proxy container; the project registration references its environment
+variable rather than saving the database password in `projects.json`.
+
+### Point Kineviz at it
+
+In Kineviz Desktop, **Create New Project → Database Type → Database Proxy**:
+
+| Field | PaySim value |
 |---|---|
-| Host/server | `127.0.0.1` |
-| Port | `5455` (or `AGE_PORT` from `.env`) |
-| Database | `kineviz` |
-| User | `kineviz_reader` |
-| Password | `KINEVIZ_PASSWORD` from `.env` |
+| API URL | `http://127.0.0.1:9081/api/age/paysim-schemaless` |
+| API Key | `PROXY_API_KEY` from this repository's `.env` |
 
-Test the connection, then run the entire single `SELECT` in
-[`02-money-cycles.sql`](../demos/fraud-rings/queries/canvas/02-money-cycles.sql).
-It returns ordinary text/number columns. No session setup commands are needed
-with this repository's container: it preloads AGE and configures `search_path`
-for every connection.
+Use the API key, not either PostgreSQL password or the proxy admin password.
+The URL ends with the **proxy project name**, not the AGE graph name.
 
-In Mapping Editor, create these mappings:
+| Demo | URL suffix | AGE graph |
+|---|---|---|
+| `fraud-rings` | `/api/age/fraud-rings` | `fraud_rings` |
+| `edge-fleet` | `/api/age/edge-fleet` | `edge_fleet` |
+| `paysim-schemaless` | `/api/age/paysim-schemaless` | `paysim` |
 
-| Columns | Mapping |
-|---|---|
-| `source_id` | Source node's unique identifier |
-| `source_name` | Source node display property |
-| `target_id` | Target node's unique identifier |
-| `target_name` | Target node display property |
-| `relationship` | Directed relationship from source to target |
-| `edge_id` | Relationship identity, if supported by your mapping UI |
-| `amount` | Relationship property |
+Run `./gxr connect up <demo>` for each graph you want to register. They share one
+proxy container. In the project's **Query** tab, enter Cypher directly:
 
-The money-cycles result has `Client` at both ends and relationship `PAID`. Other
-queries expose `source_label` and `target_label`; use them to choose the matching
-categories. If the UI only supports a fixed category, map each label combination
-separately. Preserve `edge_id` to distinguish parallel payments; a mapping that
-merges only by endpoint pair will collapse distinct transfers.
+```cypher
+MATCH (n)-[r]->(m)
+RETURN n, r, m
+LIMIT 50
+```
 
-Run a different SQL query when you want another neighborhood. These queries are
-live when executed; the SQL panel does not turn a snapshot into an automatic
-refreshing Spanner-style dashboard.
+The result is a graph on the canvas; no SQL wrapper or Mapping Editor is needed.
+The schema comes from AGE labels and the data's relationship endpoints. Pull a
+category or expand selected nodes to continue investigating. Each demo also has
+[`queries/graph/`](../demos/paysim-schemaless/queries/graph/) examples that return
+entities and paths, ready to paste into this tab.
 
-## CSV route
+### Verify and manage
+
+```bash
+./gxr connect status paysim-schemaless
+./gxr connect down                   # stops only the proxy; preserves everything
+./gxr connect up paysim-schemaless    # resumes and verifies
+npm run test:proxy                   # all three graphs must already be loaded
+```
+
+The status command with a demo repeats the connection/schema/query checks.
+Inspect logs with:
+
+```bash
+docker compose -f compose.yaml -f connect/compose.yaml logs --tail 50 proxy
+```
+
+API calls use `X-API-Key`. The endpoints used by Kineviz are:
+
+| Method | Endpoint suffix | Purpose |
+|---|---|---|
+| POST | `/test` | Reach the configured AGE graph |
+| GET | `/graphSchema` | Categories, properties and relationship endpoint categories |
+| POST | `/query` | `{ "query": "MATCH (n) RETURN n LIMIT 10", "parameters": {} }` |
+| GET | `/capabilities` | Supported graph operations |
+| POST | `/pullCategory`, `/pullRelationship`, `/expand` | Canvas pulls and expansion |
+
+### Driver behavior and boundaries
+
+The driver initializes each connection's search path, uses read-only transactions
+and the restricted `kineviz_reader` role, and closes the connection after each
+request. Queries have a 15-second timeout and a 20,000-row result ceiling.
+It also rejects mutation clauses and procedure calls before execution: AGE 1.6's
+`SET` path is not stopped by the read-only session preference alone.
+
+AGE's annotated `agtype` values become graph entities, including values nested in
+lists, maps and paths. Identities are decimal strings so JavaScript cannot round
+64-bit IDs. Kineviz's quoted numeric ID predicates are normalized only at
+`id(variable)` comparisons, including internal-relationship queries. Edge-only
+results fetch missing endpoint nodes. Returning scalar
+values gives a table; returning entities gives a graph. For a mixed result,
+entities go to the graph and scalar columns are not displayed there.
+
+Use explicit `RETURN n, r, m` with `WITH`, `UNWIND` or `UNION`. Simple
+`MATCH ... RETURN *` is supported; complex wildcard scope is rejected with an
+explanation. Parameters are substituted only at lexed `$parameter` tokens using
+Cypher literals, never inside quoted strings or comments. The complete Cypher
+query uses a collision-free SQL dollar delimiter.
+
+Schema properties are sampled from up to 500 rows per label; labels and populated
+relationship endpoint combinations are discovered from the database. An empty
+edge label has no discoverable endpoints until data is loaded. This first driver
+targets labeled graphs. Full-text indexes, graph editing and database switching
+are not provided. The proxy may cache schema briefly; `/graphSchema?refresh=true`
+forces a reload.
+
+Multi-hop expansion uses AGE variable-length paths and includes paths of one
+through the requested number of hops (at most five). Filters apply to every edge
+in the path.
+
+Use a recent Kineviz build supporting the proxy's `/capabilities` and typed
+`/expand`/`/pullCategory`/`/pullRelationship` endpoints. Older builds may execute
+handwritten queries but generate incompatible expansion statements. Verification
+of the HTTP contract and a limitation in Kineviz's legacy internal-edge helper
+are recorded in [VALIDATION.md](../docs/VALIDATION.md);
+do not infer a Desktop UI pass from it.
+
+### Connect your own AGE graph
+
+The drop-in driver is registered as `DatabaseType.AGE`, leaving the upstream
+PostgreSQL/SQL-PGQ and other driver names alone. [`proxy/install.py`](proxy/install.py)
+shows the two registrations and local-network preflight setting applied to the
+pinned upstream source. Python is
+used only where that upstream interface requires it.
+
+Build/run the same proxy image with access to your database. Its project API
+accepts this configuration (replace the example values):
+
+```json
+{
+  "name": "my-age-graph",
+  "database_type": "age",
+  "database_config": {
+    "type": "age",
+    "host": "your-postgres-host",
+    "port": 5432,
+    "database_id": "your-database",
+    "graph_name": "your-graph",
+    "username": "your-reader",
+    "use_tls": true,
+    "options": {"password_env": "AGE_READER_PASSWORD"}
+  }
+}
+```
+
+Set that password environment variable on the proxy container. Log in at
+`POST /api/admin/login` with `{ "password": "your-admin-password" }`, then send
+this configuration to `POST /api/project/create` with the returned token in
+`X-Admin-Token`. Do not save secrets in a shell history or a tracked request file.
+The Kineviz URL is then `/api/age/my-age-graph`. TLS uses certificate and hostname
+verification; configure the container's trusted certificates for your server.
+The same route can register `paysim_stream` separately for the Kafka example.
+
+AGE must be preloaded in each reader session (the bundled database already does
+this). Install the extension as an administrator and grant the reader access to
+the graph's label tables. The details below apply to SQL and proxy routes alike.
+
+## Troubleshooting the connection
+
+- **Port 9081 is busy:** set `PROXY_PORT` in `.env` and rerun `connect up`. Do not
+  stop an unrelated proxy. Copy the newly printed URL.
+- **401:** use `PROXY_API_KEY` in Kineviz's API Key field. The admin password is
+  deliberately different.
+- **Graph not found:** load the demo first, and verify the project/graph mapping
+  above. `paysim-schemaless` is the project; `paysim` is the graph.
+- **Host not allowed in the SQL panel:** that is Kineviz's SQL-host allowlist.
+  It is a different connection route. Use Database Proxy as documented here, or
+  ask your administrator to allow the specific host for [the SQL route](SQL.md).
+- **Cannot reach localhost:** run Desktop on the proxy's machine. Browser-based
+  deployments also depend on local-network permissions and their origin policy.
+  Do not expose PostgreSQL publicly to resolve a browser connection problem.
+- **Write rejected:** intentional. Use the loader/streaming commands for writes;
+  keep the visualization connection read-only.
+
+## Route B — CSV snapshot
 
 ```bash
 ./gxr export fraud-rings

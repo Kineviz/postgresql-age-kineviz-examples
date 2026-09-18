@@ -6,6 +6,7 @@ import {actorsOnly, readDataset} from "./data.ts";
 import {countsQuery, cypher, identifier, loadStatements, sqlString} from "./age.ts";
 import {config, compose, generated, root, rows, run, sql, start} from "./runtime.ts";
 import {csvRows} from "./csv.ts";
+import {connectCommand} from "./connect.ts";
 
 function dataFor(demo: Demo): Dataset {
   const dir = generated(demo);
@@ -66,7 +67,7 @@ function verify(demo: Demo): void {
 }
 function connect(demo: Demo): void {
   const env = config();
-  console.log(`Kineviz → Query → SQL → PostgreSQL\nHost: 127.0.0.1\nPort: ${env.AGE_PORT || "5455"}\nDatabase: kineviz\nUsername: kineviz_reader\nPassword: KINEVIZ_PASSWORD in .env\nGraph: ${demos[demo].graph}\nRun a single SELECT from demos/${demo}/queries/canvas/.\nMap source_id → target_id with relationship as the edge type. See connect/README.md.`);
+  console.log(`For a live graph connection: ./gxr connect up ${demo}\nChoose Database Proxy in Kineviz and use the URL that command prints.\nOptional SQL panel server: 127.0.0.1:${env.AGE_PORT || "5455"}; database kineviz; user kineviz_reader.\nSQL password: KINEVIZ_PASSWORD in .env. See connect/README.md.`);
 }
 function exportGraph(demo: Demo): void {
   const graph = demos[demo].graph, dir = join(root, "exports", demo);
@@ -113,10 +114,10 @@ function stream(action: string | undefined): void {
   } else if (action === "down") compose(["stop", "producer", "sink", "broker"], undefined, true, true);
   else throw new Error("Use ./gxr stream prepare|up|status|down");
 }
-function main(): void {
+async function main(): Promise<void> {
   const [command, arg, extra] = process.argv.slice(2);
   if (!command || command === "help" || command === "--help") {
-    console.log("gxr list | up <demo> | verify <demo> | query <demo> <file.sql> | connect <demo> | export <demo>\n    generate <demo> | down <demo> --yes | db start|status|stop | stream prepare|up|status|down"); return;
+    console.log("gxr list | up <demo> | verify <demo> | query <demo> <file.sql> | export <demo>\n    connect up <demo> | connect status [demo] | connect down\n    generate <demo> | down <demo> --yes | db start|status|stop | stream prepare|up|status|down"); return;
   }
   if (command === "list") { for (const [slug, demo] of Object.entries(demos)) console.log(`${slug}: ${demo.title}`); return; }
   if (command === "db") {
@@ -127,6 +128,7 @@ function main(): void {
     return;
   }
   if (command === "stream") { stream(arg); return; }
+  if (command === "connect" && ["up", "status", "down"].includes(arg)) { await connectCommand(arg, extra); return; }
   const demo = demoName(arg), graph = demos[demo].graph;
   if (command === "generate") { const data = dataFor(demo); console.log(`${data.vertices.length} vertices, ${data.edges.length} edges → .generated/${demo}/graph.json`); }
   else if (command === "up") { start(); load(demo, graph, dataFor(demo)); verify(demo); connect(demo); }
@@ -143,7 +145,7 @@ function main(): void {
     console.log(`Dropped ${graph}; deployment and other graphs preserved.`);
   } else throw new Error(`Unknown command: ${command}`);
 }
-try { main(); } catch (error) {
+try { await main(); } catch (error) {
   console.error(`ERROR: ${error instanceof Error ? error.message : String(error)}\nREMEDIATION: See docs/TROUBLESHOOTING.md; do not remove the database volume.`);
   process.exitCode = 1;
 }
