@@ -127,7 +127,7 @@ project, saves the 14-widget dashboard, and preserves other library entries.
 ```bash
 ./gxr stream prepare
 DEMO_TIME=120 ./gxr stream up
-./gxr stream status
+./gxr stream status        # live progress bar; Ctrl+C stops only the monitor
 ./gxr stream reset --yes   # clear replay payments; keep actors and batch data
 DEMO_TIME=120 ./gxr stream up  # begin a fresh two-minute replay
 ./gxr stream down

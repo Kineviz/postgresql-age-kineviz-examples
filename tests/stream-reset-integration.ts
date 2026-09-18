@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {mkdtempSync, cpSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {spawnSync} from "node:child_process";
+import {spawn, spawnSync} from "node:child_process";
 import {randomBytes} from "node:crypto";
 import {createServer} from "node:net";
 import {setTimeout} from "node:timers/promises";
@@ -19,7 +19,7 @@ const port = address.port;
 await new Promise<void>(resolve => probe.close(() => resolve()));
 for (const file of ["gxr", "src", "streaming", "vendor", "compose.yaml", "package.json", "package-lock.json", ".dockerignore"]) cpSync(join(root, file), join(dir, file), {recursive: true});
 writeFileSync(join(dir, ".env"), `POSTGRES_PASSWORD=${randomBytes(24).toString("hex")}\nKINEVIZ_PASSWORD=${randomBytes(24).toString("hex")}\nAGE_PORT=${port}\n`, {mode: 0o600});
-const env = {...process.env, COMPOSE_PROJECT_NAME: project, AGE_PORT: String(port), DEMO_TIME: "2", REPLAY_LIMIT: "7"};
+const env = {...process.env, COMPOSE_PROJECT_NAME: project, AGE_PORT: String(port), DEMO_TIME: "8", REPLAY_LIMIT: "7"};
 function run(command: string, args: string[], input?: string): string {
   const r = spawnSync(command, args, {cwd: dir, env, encoding: "utf8", input, maxBuffer: 16 * 1024 * 1024});
   if (r.error) throw r.error;
@@ -39,27 +39,57 @@ async function awaitPayments(n: number): Promise<void> {
   throw new Error(`Replay did not reach ${n} payments; found ${paymentCount()}`);
 }
 function verifyPacing(total: number): void {
-  compose(["wait", "producer"]);
+  const seconds = Number(env.DEMO_TIME);
+  const id = compose(["ps", "-a", "-q", "producer"]).trim();
+  const producerState = () => JSON.parse(run("docker", ["inspect", "--format", "{{json .State}}", id])) as {Status: string; ExitCode: number};
+  // The monitor may already have waited for completion. Compose wait can omit
+  // exited containers, so inspect those directly instead of waiting again.
+  if (producerState().Status !== "exited") compose(["wait", "producer"]);
+  assert.equal(producerState().ExitCode, 0);
   const logs = compose(["logs", "--no-log-prefix", "producer"]);
   const entries = logs.split("\n").filter(line => line.startsWith("{")).map(line => JSON.parse(line) as Record<string, unknown>);
   const started = entries.find(entry => entry.eventsPerSecond !== undefined);
   const completed = entries.find(entry => entry.complete === true);
   assert.ok(started && completed, "Producer must report its pacing and completion");
   assert.equal(started.total, total);
-  assert.equal(started.eventsPerSecond, total / 2);
+  assert.equal(started.eventsPerSecond, total / seconds);
   assert.equal(completed.produced, total);
-  assert.equal(completed.demoTimeSeconds, 2);
-  assert.ok(Number(completed.elapsedSeconds) >= 2, "Producer must spread the selected rows over DEMO_TIME");
-  console.log(`Duration replay: ${total} payments in ${Number(completed.elapsedSeconds).toFixed(3)} seconds (DEMO_TIME=2).`);
+  assert.equal(completed.demoTimeSeconds, seconds);
+  assert.ok(Number(completed.elapsedSeconds) >= seconds, "Producer must spread the selected rows over DEMO_TIME");
+  console.log(`Duration replay: ${total} payments in ${Number(completed.elapsedSeconds).toFixed(3)} seconds (DEMO_TIME=${seconds}).`);
+}
+async function watchProgress(interrupt = false): Promise<string> {
+  const monitor = spawn("./gxr", ["stream", "status", "--watch"], {cwd: dir, env: {...env, REPLAY_LIMIT: "999"}, stdio: ["ignore", "pipe", "pipe"]});
+  let output = "", errors = "", interrupted = false;
+  monitor.stdout.on("data", chunk => {
+    output += String(chunk);
+    if (interrupt && !interrupted && output.includes(" stored | ")) { interrupted = true; monitor.kill("SIGINT"); }
+  });
+  monitor.stderr.on("data", chunk => { errors += String(chunk); });
+  const watched = new Promise<void>((resolve, reject) => {
+    monitor.on("error", reject);
+    monitor.on("close", code => code === 0 ? resolve() : reject(new Error(errors || `Monitor exited ${code}`)));
+  });
+  const timeout = globalThis.setTimeout(() => monitor.kill("SIGTERM"), 30_000);
+  try { await watched; return output; }
+  finally { globalThis.clearTimeout(timeout); monitor.kill("SIGTERM"); }
 }
 try {
   assert.throws(() => run("./gxr", ["stream", "reset"]), /--yes/);
   assert.equal(compose(["ps", "-a", "-q"]).trim(), "", "Unconfirmed reset must not start containers");
   console.log("Isolated reset test: preparing actors and a seven-payment replay.");
   run("./gxr", ["stream", "prepare"]);
+  assert.match(run("./gxr", ["stream", "status", "--once"]), /0\/12,033 stored.*Ready/);
   run("./gxr", ["stream", "reset", "--yes"]);
   assert.equal(paymentCount(), 0, "Fresh reset must also work before a Kafka consumer group exists");
   run("./gxr", ["stream", "up"]);
+  assert.match(await watchProgress(true), /Monitor stopped; replay continues unchanged/);
+  assert.ok(compose(["ps", "--services", "--status", "running"]).split("\n").includes("producer"), "Interrupting the monitor must leave replay running");
+  const output = await watchProgress();
+  assert.match(output, /stored.*Replaying/);
+  assert.match(output, /7\/7 stored.*Complete/);
+  assert.doesNotMatch(output, /\x1b|\/999|\/12,033/);
+  console.log("Progress monitor refreshed from active replay to 7/7 Complete, using the producer's limit.");
   await awaitPayments(7);
   verifyPacing(7);
   sql("SELECT create_graph('paysim'); SELECT * FROM cypher('paysim', $$CREATE (:client {name:'batch sentinel'})$$) AS (v agtype);");
@@ -67,6 +97,7 @@ try {
   run("./gxr", ["stream", "reset", "--yes"]);
   assert.equal(paymentCount(), 0);
   assert.equal(Number(sql("SELECT count(*) FROM public.replay_receipts;")), 0);
+  assert.match(run("./gxr", ["stream", "status", "--once"]), /0%\s+0\/7 stored.*Paused/);
   assert.equal(preserved(), snapshot, "Actors, identity edges, and batch must survive reset exactly");
   const running = compose(["ps", "--services", "--status", "running"]).trim().split("\n");
   assert.ok(!running.includes("producer") && !running.includes("sink"));
@@ -75,6 +106,7 @@ try {
   await setTimeout(6000);
   assert.equal(paymentCount(), 0, "Old Kafka messages must not repopulate the graph");
   env.REPLAY_LIMIT = "3";
+  env.DEMO_TIME = "2";
   run("./gxr", ["stream", "up"]);
   await awaitPayments(3);
   verifyPacing(3);

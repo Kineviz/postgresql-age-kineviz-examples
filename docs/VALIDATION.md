@@ -201,3 +201,22 @@ container startup and sink catch-up are outside the producer's clock.
 These timings measure the producer, not end-to-end dashboard completion. The
 default full 120-second duration was covered by scheduling tests; the timed
 Kafka checks used short prefixes, not a new full-duration UI recording.
+
+## CLI replay progress (2026-09-18)
+
+`./gxr stream status` now displays committed transaction progress, refreshing in
+place in a terminal. `--once` gives one snapshot, `--watch` supports piped live
+output, and `--details` retains the service/log/Kafka diagnostics.
+
+- Type checking, all 24 unit tests, and database integration checks passed.
+- The actual completed replay rendered **12,033/12,033, 100%, Complete** in
+  both terminal and snapshot modes without changing its data.
+- An isolated seven-payment replay refreshed from **Replaying** to **7/7,
+  Complete**. Setting `REPLAY_LIMIT=999` on the monitor did not override the
+  producer's actual limit of seven. Piped output contained no ANSI controls.
+- Interrupting the monitor with SIGINT exited cleanly and left the producer
+  running. Reset then rendered **0/7, 0%, Paused**, with actors, identity edges
+  and batch data unchanged.
+- Unit cases cover sink catch-up, failed/stopped writers, missing setup, an
+  unavailable database, count mismatches, unknown/empty totals and extra
+  existing rows. Incomplete counts are never rounded up to 100%.

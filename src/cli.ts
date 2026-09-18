@@ -9,6 +9,7 @@ import {csvRows} from "./csv.ts";
 import {connectCommand} from "./connect.ts";
 import {dashboardCommand} from "./dashboard.ts";
 import {resetStreamCommand} from "./stream-reset.ts";
+import {streamStatusCommand} from "./stream-status.ts";
 
 function dataFor(demo: Demo): Dataset {
   const dir = generated(demo);
@@ -108,11 +109,6 @@ function stream(action: string | undefined): void {
   } else if (action === "up") {
     stream("prepare");
     compose(["up", "-d", "--build", "broker", "sink", "producer"], undefined, true, true);
-  } else if (action === "status") {
-    console.log(compose(["ps", "-a"], undefined, false, true));
-    console.log(JSON.stringify(rows(`SELECT (SELECT count(*) FROM public.replay_receipts) AS landed_transactions, (SELECT count(*) FROM paysim_stream.transaction) AS transaction_vertices`), null, 2));
-    console.log(compose(["logs", "--tail", "3", "producer", "sink"], undefined, false, true));
-    console.log(compose(["exec", "-T", "broker", "/opt/kafka/bin/kafka-consumer-groups.sh", "--bootstrap-server", "broker:9092", "--describe", "--group", "paysim-age-sink"], undefined, false, true));
   } else if (action === "down") compose(["stop", "producer", "sink", "broker"], undefined, true, true);
   else throw new Error("Use ./gxr stream prepare|up|status|down|reset --yes");
 }
@@ -134,6 +130,7 @@ async function main(): Promise<void> {
     await dashboardCommand(process.argv.slice(4)); return;
   }
   if (command === "stream") {
+    if (arg === "status") { await streamStatusCommand(process.argv.slice(4)); return; }
     if (arg === "reset") resetStreamCommand(extra); else stream(arg);
     return;
   }

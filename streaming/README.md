@@ -15,9 +15,27 @@ broker, a producer, and an AGE sink. By default, the producer spreads all
 transactions in the generated CSV (12,033 in the default fixture) over
 **120 seconds = 2 minutes**. The sink may need additional time to catch up.
 
-`status` reports producer progress, landed receipts, and transaction vertices.
-Completion means the producer exited successfully after 12,033 events **and**
-both landed counts reach 12,033. A started container alone is not success.
+`status` displays a progress bar based on transactions actually stored in AGE
+and their committed receipts. In a terminal it refreshes every two seconds
+until complete or stopped; **Ctrl+C stops only the monitor**, leaving replay
+running. Piped output is a single snapshot without terminal control characters.
+
+```text
+[████████████░░░░░░░░░░░░]  50%  6,017/12,033 stored | Replaying
+```
+
+```bash
+./gxr stream status --once     # one snapshot, including in a terminal
+./gxr stream status --watch    # refresh even when piping output
+./gxr stream status --details  # snapshot plus services, logs and Kafka lag
+```
+
+The total comes from the producer's selected rows, including `REPLAY_LIMIT`.
+Existing stored rows are retained on repeat replay, so counts can already meet
+or exceed a smaller target. Completion means the producer exited successfully
+**and** both landed counts reach the selected total. A finished producer with
+missing database rows shows **Catching up**; paused or failed writers are shown
+separately. A started container alone is not success.
 Inspect the consumer group's lag directly when needed:
 
 ```bash
