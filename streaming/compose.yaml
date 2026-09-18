@@ -38,8 +38,8 @@ services:
       dockerfile: streaming/Dockerfile
     command: ["node", "--experimental-strip-types", "streaming/producer.ts"]
     environment:
-      REPLAY_RATE: ${REPLAY_RATE:-100}
-      REPLAY_LIMIT: ${REPLAY_LIMIT:-12033}
+      DEMO_TIME: ${DEMO_TIME:-120}
+      REPLAY_LIMIT: ${REPLAY_LIMIT:-}
     volumes:
       - ./.generated/paysim-schemaless:/data:ro
     depends_on:

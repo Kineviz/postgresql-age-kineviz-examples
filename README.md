@@ -126,17 +126,20 @@ project, saves the 14-widget dashboard, and preserves other library entries.
 
 ```bash
 ./gxr stream prepare
-./gxr stream up
+DEMO_TIME=120 ./gxr stream up
 ./gxr stream status
 ./gxr stream reset --yes   # clear replay payments; keep actors and batch data
-./gxr stream up            # begin a fresh replay
+DEMO_TIME=120 ./gxr stream up  # begin a fresh two-minute replay
 ./gxr stream down
 ```
 
 The replay uses a separate graph, **`paysim_stream`**, and leaves `paysim` intact.
 It seeds actors and identifiers, then replays 12,033 generated transactions
-through Kafka. A receipt and graph mutation commit together before Kafka advances
-the consumer offset. Replaying the same event does not duplicate it.
+through Kafka. `DEMO_TIME` sets the replay duration in seconds (default `120`);
+the producer calculates pacing from the selected transaction count. Startup and
+sink catch-up can take additional time. A receipt and graph mutation commit
+together before Kafka advances the consumer offset. Replaying the same event
+does not duplicate it.
 Details and progress queries: [streaming/README.md](streaming/README.md).
 
 ## Resources and limits

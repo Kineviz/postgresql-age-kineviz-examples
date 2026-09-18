@@ -179,3 +179,25 @@ and SQL rollback. Type checking, 14 unit tests, database integration, proxy
 integration (including both PaySim registrations), dashboard checks, and the
 isolated reset/replay test passed locally. These are local ARM64 results; check
 GitHub Actions for the corresponding committed Linux result.
+## Duration-based replay (2026-09-18)
+
+`DEMO_TIME` now sets the producer's target duration in seconds (default 120),
+using the actual selected CSV row count. The default no longer caps replay at
+12,033 rows. `REPLAY_LIMIT` still supports a prefix. Pacing includes send time;
+container startup and sink catch-up are outside the producer's clock.
+
+- TypeScript checking and all 19 unit tests passed, including count/limit
+  handling, invalid durations, empty input, and send-latency compensation.
+- Database integration passed for all three demos and 24 queries, including
+  preservation, export endpoints, reader permissions, rollback and idempotency.
+- In a separate temporary Docker deployment, `DEMO_TIME=2` replayed seven
+  payments in **2.002 seconds** and three payments in **2.001 seconds**. Both
+  selected counts landed in AGE; the reset test also checks that old Kafka
+  messages cannot refill a cleared graph and that actors/batch data survive.
+- The updated dashboard instructions were installed in Desktop's **Postgres +
+  AGE** project and matched the repository JSON exactly on readback. Its prior file was
+  backed up. This check did not reset or restart the user's actual replay.
+
+These timings measure the producer, not end-to-end dashboard completion. The
+default full 120-second duration was covered by scheduling tests; the timed
+Kafka checks used short prefixes, not a new full-duration UI recording.

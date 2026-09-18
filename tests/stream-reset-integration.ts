@@ -19,7 +19,7 @@ const port = address.port;
 await new Promise<void>(resolve => probe.close(() => resolve()));
 for (const file of ["gxr", "src", "streaming", "vendor", "compose.yaml", "package.json", "package-lock.json", ".dockerignore"]) cpSync(join(root, file), join(dir, file), {recursive: true});
 writeFileSync(join(dir, ".env"), `POSTGRES_PASSWORD=${randomBytes(24).toString("hex")}\nKINEVIZ_PASSWORD=${randomBytes(24).toString("hex")}\nAGE_PORT=${port}\n`, {mode: 0o600});
-const env = {...process.env, COMPOSE_PROJECT_NAME: project, AGE_PORT: String(port), REPLAY_RATE: "10000", REPLAY_LIMIT: "7"};
+const env = {...process.env, COMPOSE_PROJECT_NAME: project, AGE_PORT: String(port), DEMO_TIME: "2", REPLAY_LIMIT: "7"};
 function run(command: string, args: string[], input?: string): string {
   const r = spawnSync(command, args, {cwd: dir, env, encoding: "utf8", input, maxBuffer: 16 * 1024 * 1024});
   if (r.error) throw r.error;
@@ -38,6 +38,20 @@ async function awaitPayments(n: number): Promise<void> {
   while (Date.now() < deadline) {if (paymentCount() === n) return; await setTimeout(500);}
   throw new Error(`Replay did not reach ${n} payments; found ${paymentCount()}`);
 }
+function verifyPacing(total: number): void {
+  compose(["wait", "producer"]);
+  const logs = compose(["logs", "--no-log-prefix", "producer"]);
+  const entries = logs.split("\n").filter(line => line.startsWith("{")).map(line => JSON.parse(line) as Record<string, unknown>);
+  const started = entries.find(entry => entry.eventsPerSecond !== undefined);
+  const completed = entries.find(entry => entry.complete === true);
+  assert.ok(started && completed, "Producer must report its pacing and completion");
+  assert.equal(started.total, total);
+  assert.equal(started.eventsPerSecond, total / 2);
+  assert.equal(completed.produced, total);
+  assert.equal(completed.demoTimeSeconds, 2);
+  assert.ok(Number(completed.elapsedSeconds) >= 2, "Producer must spread the selected rows over DEMO_TIME");
+  console.log(`Duration replay: ${total} payments in ${Number(completed.elapsedSeconds).toFixed(3)} seconds (DEMO_TIME=2).`);
+}
 try {
   assert.throws(() => run("./gxr", ["stream", "reset"]), /--yes/);
   assert.equal(compose(["ps", "-a", "-q"]).trim(), "", "Unconfirmed reset must not start containers");
@@ -47,6 +61,7 @@ try {
   assert.equal(paymentCount(), 0, "Fresh reset must also work before a Kafka consumer group exists");
   run("./gxr", ["stream", "up"]);
   await awaitPayments(7);
+  verifyPacing(7);
   sql("SELECT create_graph('paysim'); SELECT * FROM cypher('paysim', $$CREATE (:client {name:'batch sentinel'})$$) AS (v agtype);");
   const snapshot = preserved();
   run("./gxr", ["stream", "reset", "--yes"]);
@@ -62,6 +77,7 @@ try {
   env.REPLAY_LIMIT = "3";
   run("./gxr", ["stream", "up"]);
   await awaitPayments(3);
+  verifyPacing(3);
   assert.equal(Number(sql("SELECT count(*) FROM public.replay_receipts;")), 3);
   assert.equal(Number(sql("SELECT (SELECT count(*) FROM paysim_stream.performs) + (SELECT count(*) FROM paysim_stream.to_client) + (SELECT count(*) FROM paysim_stream.to_merchant) + (SELECT count(*) FROM paysim_stream.to_bank);")), 6);
   assert.equal(preserved(), snapshot);

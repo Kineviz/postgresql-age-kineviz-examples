@@ -60,5 +60,5 @@ export function resetStreamCommand(confirmation?: string): void {
   compose(["up", "-d", "--wait", "db", "broker"], undefined, true, true);
   compose(["build", "sink"], undefined, true, true);
   compose(["run", "--rm", "--no-deps", "-T", "sink", "node", "--experimental-strip-types", "streaming/reset.ts", "--yes"], undefined, true, true);
-  console.log("Replay reset: 0 transactions, 0 payment edges, 0 receipts. Actors, identities and batch graphs preserved.\nProducer and sink are stopped. Open the live dashboard, then start: REPLAY_RATE=50 ./gxr stream up");
+  console.log("Replay reset: 0 transactions, 0 payment edges, 0 receipts. Actors, identities and batch graphs preserved.\nProducer and sink are stopped. Open the live dashboard, then start: DEMO_TIME=120 ./gxr stream up");
 }

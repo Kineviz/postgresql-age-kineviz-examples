@@ -6,8 +6,8 @@ import {compose, root, rows, run} from "../src/runtime.ts";
 import {countsQuery, cypher} from "../src/age.ts";
 import type {Dataset} from "../src/model.ts";
 
-process.env.REPLAY_RATE = "10000";
-process.env.REPLAY_LIMIT = "12033";
+process.env.DEMO_TIME = "1";
+process.env.REPLAY_LIMIT = "";
 run("./gxr", ["stream", "up"], undefined, true);
 const expected = JSON.parse(readFileSync(join(root, ".generated/paysim-schemaless/graph.json"), "utf8")) as Dataset;
 const total = expected.vertices.filter(n => n.label === "transaction").length;

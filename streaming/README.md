@@ -5,14 +5,15 @@ It is a demonstration stream, not a connection to a live payment provider.
 
 ```bash
 ./gxr stream prepare
-./gxr stream up
+DEMO_TIME=120 ./gxr stream up
 ./gxr stream status
 ```
 
 `prepare` generates the default fixture and seeds 1,633 actors/identifiers and
 1,200 identity edges in `paysim_stream`. `up` starts an internal-only Kafka
-broker, a producer, and an AGE sink. The producer sends 12,033 transactions at
-100 events/second by default. The sink may need additional time to catch up.
+broker, a producer, and an AGE sink. By default, the producer spreads all
+transactions in the generated CSV (12,033 in the default fixture) over
+**120 seconds = 2 minutes**. The sink may need additional time to catch up.
 
 `status` reports producer progress, landed receipts, and transaction vertices.
 Completion means the producer exited successfully after 12,033 events **and**
@@ -28,14 +29,27 @@ docker compose -f compose.yaml -f streaming/compose.yaml exec broker \
 The final graph has the same 13,666 vertices and 25,266 edges as batch `paysim`.
 It does not overwrite or clear that batch graph.
 
-To control pacing for a new/restarted producer:
+Set the duration in seconds for a new/restarted producer:
 
 ```bash
-REPLAY_RATE=500 ./gxr stream up
+DEMO_TIME=120 ./gxr stream up
 ```
 
-For a short trial use `REPLAY_LIMIT=100`; it is a prefix of the fixture and may
-not include the planted fraud findings. Running again without that limit
+`DEMO_TIME` replaces `REPLAY_RATE` and defaults to `120`. It must be a positive
+number of seconds; fractional seconds are accepted. Pacing is calculated from
+the actual number of CSV transactions selected, including any `REPLAY_LIMIT`.
+For example, 12,033 transactions over 120 seconds targets about 100.3 events/s;
+100 selected transactions over 120 seconds targets about 0.83 events/s.
+Without a limit the entire file is replayed.
+
+The clock starts after the producer connects to Kafka, excluding container
+builds and startup. Send time is included in the schedule. If Kafka cannot keep
+up, replay takes longer; AGE ingestion and dashboard refresh can also finish
+later. Producer logs show the selected count, target rate, duration, and actual
+elapsed seconds.
+
+For a short trial use `DEMO_TIME=10 REPLAY_LIMIT=100 ./gxr stream up`; it is a
+prefix of the fixture and may not include the planted fraud findings. Running again without that limit
 replays the complete file; already-landed IDs are skipped. Keep the same
 generated fixture while the stream is running.
 
@@ -53,7 +67,7 @@ registration continues to read the separate batch graph.
 
 ```bash
 ./demos/paysim-schemaless/scripts/install-dashboard.sh
-REPLAY_RATE=50 ./gxr stream up
+DEMO_TIME=120 ./gxr stream up
 ```
 
 Open **Dashboard → PaySim · PostgreSQL + AGE**. Its database panels poll every
@@ -65,7 +79,7 @@ For SQL inspection, [`progress.sql`](progress.sql) returns the replay counts.
 
 ```bash
 ./gxr stream reset --yes
-REPLAY_RATE=50 ./gxr stream up
+DEMO_TIME=120 ./gxr stream up
 ```
 
 `reset` requires `--yes` before taking any action. It stops the producer and sink,

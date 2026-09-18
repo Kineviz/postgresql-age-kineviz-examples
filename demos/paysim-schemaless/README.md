@@ -67,14 +67,16 @@ then run from the repo root:
 
 ```bash
 ./demos/paysim-schemaless/scripts/install-dashboard.sh
-REPLAY_RATE=50 ./gxr stream up
+DEMO_TIME=120 ./gxr stream up
 ```
 
-Open **Dashboard → PaySim · PostgreSQL + AGE**. To start over:
+`DEMO_TIME=120` spreads the selected transactions over two minutes, starting
+after the producer connects to Kafka. Open **Dashboard → PaySim · PostgreSQL + AGE**.
+To start over:
 
 ```bash
 ./gxr stream reset --yes
-REPLAY_RATE=50 ./gxr stream up
+DEMO_TIME=120 ./gxr stream up
 ```
 
 The reset keeps actors, identifiers and batch data, and pauses the replay at zero

@@ -62,14 +62,18 @@ The installer defaults to **`paysim-stream`**, the dedicated proxy registration
 for **`paysim_stream`**. Once the dashboard is open, start payments with:
 
 ```bash
-REPLAY_RATE=50 ./gxr stream up
+DEMO_TIME=120 ./gxr stream up
 ```
+
+`DEMO_TIME` is the replay duration in seconds: `120` means two minutes. The
+producer derives pacing from the selected transactions; startup, database
+catch-up, and panel refresh may add time.
 
 To repeat the demonstration from zero:
 
 ```bash
 ./gxr stream reset --yes
-REPLAY_RATE=50 ./gxr stream up
+DEMO_TIME=120 ./gxr stream up
 ```
 
 The reset stops both writers, waits for Kafka to release the consumer, advances
