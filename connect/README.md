@@ -188,7 +188,9 @@ this configuration to `POST /api/project/create` with the returned token in
 `X-Admin-Token`. Do not save secrets in a shell history or a tracked request file.
 The Kineviz URL is then `/api/age/my-age-graph`. TLS uses certificate and hostname
 verification; configure the container's trusted certificates for your server.
-The same route can register `paysim_stream` separately for the Kafka example.
+For the included Kafka replay, use `./gxr stream prepare` followed by
+`./gxr connect up paysim-stream`. This creates a separate registration for
+`paysim_stream` without changing the batch `paysim-schemaless` connection.
 
 AGE must be preloaded in each reader session (the bundled database already does
 this). Install the extension as an administrator and grant the reader access to

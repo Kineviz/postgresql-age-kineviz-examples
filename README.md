@@ -104,7 +104,15 @@ reserved demo name is refused rather than replaced.
 
 ## PaySim dashboard
 
-After connecting a PaySim Database Proxy project in Kineviz Desktop:
+Prepare and register the replay graph:
+
+```bash
+./gxr stream prepare
+./gxr connect up paysim-stream
+```
+
+Connect a Database Proxy project in Desktop to the printed `paysim-stream` URL,
+then install its dashboard:
 
 ```bash
 ./demos/paysim-schemaless/scripts/install-dashboard.sh
@@ -120,6 +128,8 @@ project, saves the 14-widget dashboard, and preserves other library entries.
 ./gxr stream prepare
 ./gxr stream up
 ./gxr stream status
+./gxr stream reset --yes   # clear replay payments; keep actors and batch data
+./gxr stream up            # begin a fresh replay
 ./gxr stream down
 ```
 
@@ -153,6 +163,7 @@ npm run test:integration             # requires Docker; loads all three demos
 npm run test:stream                  # Kafka replay + complete graph comparison
 npm run test:proxy                   # proxy API + graph operations on all demos
 npm run test:dashboard               # ten dashboard queries + empty replay state
+npm run test:reset                   # reset/replay in an isolated Docker deployment
 ```
 
 The CLI, loaders, streaming runtime, and integration tests are TypeScript and

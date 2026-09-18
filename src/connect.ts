@@ -5,6 +5,12 @@ import {config, root, rows, run, sql} from "./runtime.ts";
 import {identifier, sqlString} from "./age.ts";
 import {demoName, demos} from "./model.ts";
 
+export function proxyTarget(slug?: string): {project: string; graph: string; prepare: string} {
+  if (slug === "paysim-stream") return {project: slug, graph: "paysim_stream", prepare: "./gxr stream prepare"};
+  const demo = demoName(slug);
+  return {project: demo, graph: demos[demo].graph, prepare: `./gxr up ${demo}`};
+}
+
 export function proxyCompose(args: string[], inherit = true): string {
   return run("docker", ["compose", "--project-directory", root, "--env-file", join(root, ".env"),
     "-f", join(root, "compose.yaml"), "-f", join(root, "connect/compose.yaml"), ...args], undefined, inherit);
@@ -42,14 +48,13 @@ export async function connectCommand(action: string | undefined, slug?: string):
   }
   if (action === "status") {
     proxyCompose(["ps", "proxy"]);
-    if (slug) await checkProxy(demoName(slug));
+    if (slug) await checkProxy(proxyTarget(slug).project);
     return;
   }
   if (action !== "up") throw new Error("Use ./gxr connect up <demo> | status [demo] | down");
-  const demo = demoName(slug);
-  const graph = demos[demo].graph;
+  const {project, graph, prepare} = proxyTarget(slug);
   if (!rows(`SELECT graph FROM public.demo_registry WHERE graph=${sqlString(graph)}`).length) {
-    throw new Error(`Load the owned demo first: ./gxr up ${demo}`);
+    throw new Error(`Load the owned demo first: ${prepare}`);
   }
   // AGE creates the parent's primary key but does not index the child labels.
   // Canvas traversals join by ID/endpoints, not the fixture's property keys.
@@ -76,17 +81,17 @@ export async function connectCommand(action: string | undefined, slug?: string):
   proxyCompose(["up", "-d", "--build", "--wait", "--no-deps", "proxy"]);
   const login = await proxyRequest("/api/admin/login", {password: env.PROXY_ADMIN_PASSWORD}) as {token: string};
   const projects = await proxyRequest("/api/project/list", undefined, login.token) as {name: string; database_type: string; database_config: {graph_name?: string; database_id?: string; host?: string}}[];
-  const existing = projects.find(p => p.name === demo);
+  const existing = projects.find(p => p.name === project);
   if (existing) {
-    if (existing.database_type !== "age" || existing.database_config.graph_name !== demos[demo].graph || existing.database_config.database_id !== "kineviz" || existing.database_config.host !== "db") {
-      throw new Error(`Existing proxy project ${demo} points elsewhere; preserving it. Review the proxy configuration.`);
+    if (existing.database_type !== "age" || existing.database_config.graph_name !== graph || existing.database_config.database_id !== "kineviz" || existing.database_config.host !== "db") {
+      throw new Error(`Existing proxy project ${project} points elsewhere; preserving it. Review the proxy configuration.`);
     }
   } else {
-    await proxyRequest("/api/project/create", {name: demo, database_type: "age", database_config: {
-      type: "age", host: "db", port: 5432, database_id: "kineviz", graph_name: demos[demo].graph,
+    await proxyRequest("/api/project/create", {name: project, database_type: "age", database_config: {
+      type: "age", host: "db", port: 5432, database_id: "kineviz", graph_name: graph,
       username: "kineviz_reader", auth_type: "username_password", options: {password_env: "KINEVIZ_PASSWORD"},
     }}, login.token);
   }
-  await checkProxy(demo);
-  console.log(`\nKineviz → Create New Project → Database Proxy\nAPI URL: ${proxyBase()}/api/age/${demo}\nAPI Key: PROXY_API_KEY in .env\nOpen the Query tab and run: MATCH (n)-[r]->(m) RETURN n, r, m LIMIT 50\nSee connect/README.md.`);
+  await checkProxy(project);
+  console.log(`\nKineviz → Create New Project → Database Proxy\nAPI URL: ${proxyBase()}/api/age/${project}\nAPI Key: PROXY_API_KEY in .env\nOpen the Query tab and run: MATCH (n)-[r]->(m) RETURN n, r, m LIMIT 50\nSee connect/README.md.`);
 }

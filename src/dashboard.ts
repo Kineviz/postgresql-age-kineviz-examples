@@ -130,7 +130,7 @@ function desktopUrls(): string[] {
 }
 export async function dashboardCommand(args: string[]): Promise<void> {
   let url = process.env.KINEVIZ_URL, projectId: string | undefined, json = false;
-  let proxyProject = "paysim-schemaless";
+  let proxyProject = "paysim-stream";
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--help") {
@@ -161,6 +161,9 @@ export async function dashboardCommand(args: string[]): Promise<void> {
   const spec = JSON.parse(readFileSync(specFile, "utf8")) as DashboardSpec;
   const result = await installDashboard(url, project._id, spec);
   const output = {...result, projectId: project._id, projectName: project.projectName, title: spec.title, url};
+  const nextStep = proxyProject === "paysim-stream"
+    ? "For a fresh replay: ./gxr stream reset --yes, then ./gxr stream up."
+    : "For the live replay, connect a project to paysim-stream. Batch totals stay steady.";
   if (json) console.log(JSON.stringify(output));
-  else console.log(`Installed and verified “${spec.title}” in “${project.projectName}”.\nOpen Dashboard in the left rail → ${spec.title}. Reopen the library if it was already open.\nProject file: ${result.path}${result.backup ? `\nPrevious version backed up at ${result.backup}.*` : ""}\nPanels refresh every 2–10 seconds through this project's AGE connection. Batch totals stay steady.`);
+  else console.log(`Installed and verified “${spec.title}” in “${project.projectName}”.\nOpen Dashboard in the left rail → ${spec.title}. Reopen the library if it was already open.\nProject file: ${result.path}${result.backup ? `\nPrevious version backed up at ${result.backup}.*` : ""}\nPanels refresh every 2–10 seconds through this project's AGE connection. ${nextStep}`);
 }

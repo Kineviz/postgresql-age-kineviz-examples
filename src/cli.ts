@@ -8,6 +8,7 @@ import {config, compose, generated, root, rows, run, sql, start} from "./runtime
 import {csvRows} from "./csv.ts";
 import {connectCommand} from "./connect.ts";
 import {dashboardCommand} from "./dashboard.ts";
+import {resetStreamCommand} from "./stream-reset.ts";
 
 function dataFor(demo: Demo): Dataset {
   const dir = generated(demo);
@@ -113,12 +114,12 @@ function stream(action: string | undefined): void {
     console.log(compose(["logs", "--tail", "3", "producer", "sink"], undefined, false, true));
     console.log(compose(["exec", "-T", "broker", "/opt/kafka/bin/kafka-consumer-groups.sh", "--bootstrap-server", "broker:9092", "--describe", "--group", "paysim-age-sink"], undefined, false, true));
   } else if (action === "down") compose(["stop", "producer", "sink", "broker"], undefined, true, true);
-  else throw new Error("Use ./gxr stream prepare|up|status|down");
+  else throw new Error("Use ./gxr stream prepare|up|status|down|reset --yes");
 }
 async function main(): Promise<void> {
   const [command, arg, extra] = process.argv.slice(2);
   if (!command || command === "help" || command === "--help") {
-    console.log("gxr list | up <demo> | verify <demo> | query <demo> <file.sql> | export <demo>\n    connect up <demo> | connect status [demo] | connect down\n    dashboard install [projectId] [--url http://host:port]\n    generate <demo> | down <demo> --yes | db start|status|stop | stream prepare|up|status|down"); return;
+    console.log("gxr list | up <demo> | verify <demo> | query <demo> <file.sql> | export <demo>\n    connect up <demo|paysim-stream> | connect status [demo|paysim-stream] | connect down\n    dashboard install [projectId] [--url http://host:port]\n    generate <demo> | down <demo> --yes | db start|status|stop | stream prepare|up|status|down|reset --yes"); return;
   }
   if (command === "list") { for (const [slug, demo] of Object.entries(demos)) console.log(`${slug}: ${demo.title}`); return; }
   if (command === "db") {
@@ -132,7 +133,10 @@ async function main(): Promise<void> {
     if (arg !== "install") throw new Error("Use ./gxr dashboard install [projectId] [--url http://host:port]");
     await dashboardCommand(process.argv.slice(4)); return;
   }
-  if (command === "stream") { stream(arg); return; }
+  if (command === "stream") {
+    if (arg === "reset") resetStreamCommand(extra); else stream(arg);
+    return;
+  }
   if (command === "connect" && ["up", "status", "down"].includes(arg)) { await connectCommand(arg, extra); return; }
   const demo = demoName(arg), graph = demos[demo].graph;
   if (command === "generate") { const data = dataFor(demo); console.log(`${data.vertices.length} vertices, ${data.edges.length} edges → .generated/${demo}/graph.json`); }

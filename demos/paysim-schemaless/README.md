@@ -53,14 +53,29 @@ Paste the Cypher files in [`queries/graph/`](queries/graph/) into Kineviz's
 **Query** tab. They return nodes, edges and paths directly; the SQL files remain
 available for tables and manual mapping.
 
-## Dashboard
+## Live dashboard and reset
 
-After creating the Database Proxy project in Desktop, run from the repo root:
+Prepare the separate replay graph and its proxy registration:
+
+```bash
+./gxr stream prepare
+./gxr connect up paysim-stream
+```
+
+Connect the Desktop project to the printed `paysim-stream` Database Proxy URL,
+then run from the repo root:
 
 ```bash
 ./demos/paysim-schemaless/scripts/install-dashboard.sh
+REPLAY_RATE=50 ./gxr stream up
 ```
 
-Open **Dashboard → PaySim · PostgreSQL + AGE**. The 14 widgets query AGE
-automatically. Batch totals stay steady; the separate Kafka replay requires a
-project connected to `paysim_stream`. See [installation and refresh details](kineviz/).
+Open **Dashboard → PaySim · PostgreSQL + AGE**. To start over:
+
+```bash
+./gxr stream reset --yes
+REPLAY_RATE=50 ./gxr stream up
+```
+
+The reset keeps actors, identifiers and batch data, and pauses the replay at zero
+until `stream up`. [Installation and refresh details](kineviz/).

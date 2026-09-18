@@ -371,7 +371,7 @@
       "id": "notes",
       "type": "markdown",
       "title": "Reading this as an investigator",
-      "text": "**Synthetic ground truth.** Fraud charts use the fixture’s planted `isfraud` flags; they are not predictions. The gauge measures fraud-labelled value as a share of all payment value.\n\n**Shared identity is a lead.** “Shared + transfers” means at least one direct payment between holders of a shared identifier. “Shared only” means no such payment is present in this graph. Neither is a fraud verdict.\n\n**Current project connection.** These panels query PostgreSQL + AGE through Database Proxy every 2–10 seconds. The batch `paysim` graph is already loaded, so totals stay steady. A project connected to `paysim_stream` follows the separate finite Kafka replay. Selecting nodes on the canvas updates the selection count.",
+      "text": "**Synthetic ground truth.** Fraud charts use the fixture’s planted `isfraud` flags; they are not predictions. The gauge measures fraud-labelled value as a share of all payment value.\n\n**Shared identity is a lead.** “Shared + transfers” means at least one direct payment between holders of a shared identifier. “Shared only” means no such payment is present in this graph. Neither is a fraud verdict.\n\n**Live replay.** These panels query PostgreSQL + AGE through Database Proxy every 2–10 seconds. The `paysim-stream` connection reads `paysim_stream`, where Kafka payments arrive. To start over, run `./gxr stream reset --yes`, then `REPLAY_RATE=50 ./gxr stream up`. The reset keeps actors and identity links; the separate batch graph stays intact. Selecting nodes on the canvas updates the selection count.",
       "w": 9,
       "h": 3
     }

@@ -12,12 +12,12 @@ recipient rankings, amount bands, merchant destinations, and canvas selection.
 Start the example and its proxy from the repository root:
 
 ```bash
-./gxr up paysim-schemaless
-./gxr connect up paysim-schemaless
+./gxr stream prepare
+./gxr connect up paysim-stream
 ```
 
 Create or open a **Database Proxy** project in Kineviz Desktop connected to
-`http://127.0.0.1:9081/api/age/paysim-schemaless` (use your configured proxy port).
+`http://127.0.0.1:9081/api/age/paysim-stream` (use your configured proxy port).
 The API key is `PROXY_API_KEY` in your private `.env`.
 Then run, from the repository root:
 
@@ -58,16 +58,37 @@ KPIs, daily activity, and amount bands refresh every **2 seconds**; investigatio
 queries refresh every **10 seconds**. They query the entire connected graph,
 independently of the nodes currently on the canvas.
 
-The normal proxy registration points to **`paysim`**, the completed batch graph.
-Its totals stay steady. `./gxr stream up` writes to the separate **`paysim_stream`**
-graph and does not change that project connection. To watch a replay, separately
-register `paysim_stream` in the AGE proxy and connect a Kineviz project to that
-registration. Import the same dashboard JSON there, or use
-`--proxy-project NAME` with the installer for that existing local registration.
-See the [proxy registration API](../../../connect/README.md) and
+The installer defaults to **`paysim-stream`**, the dedicated proxy registration
+for **`paysim_stream`**. Once the dashboard is open, start payments with:
+
+```bash
+REPLAY_RATE=50 ./gxr stream up
+```
+
+To repeat the demonstration from zero:
+
+```bash
+./gxr stream reset --yes
+REPLAY_RATE=50 ./gxr stream up
+```
+
+The reset stops both writers, waits for Kafka to release the consumer, advances
+past old messages, and clears stream payments, their edges, and replay receipts
+in one PostgreSQL transaction. It keeps actors, identity links, label tables,
+indexes, and batch data. It leaves the replay paused at zero until `stream up`.
+Existing nodes already loaded on the canvas are snapshots; reset does not remove
+those or saved views. Database dashboard panels refresh independently.
+
+For a dashboard over the completed **batch** graph, connect a project to
+`/api/age/paysim-schemaless` and install explicitly:
+
+```bash
+./demos/paysim-schemaless/scripts/install-dashboard.sh --proxy-project paysim-schemaless
+```
+
+Batch totals stay steady. A completed replay also stays complete until reset;
+merely restarting the producer does not duplicate payments. See the
 [replay lifecycle](../../../streaming/README.md).
-The installer neither starts nor clears a replay. A completed replay remains
-complete; restarting it does not duplicate payments.
 
 `isfraud` is planted synthetic ground truth, not a prediction. “Shared + transfers”
 counts shared identifiers whose holders have a direct payment between them;
@@ -87,7 +108,7 @@ errors and malformed existing manifests stop installation rather than erase the
 library.
 
 If widgets report a query or connection error, run
-`./gxr connect status paysim-schemaless` and check the project's API URL and key.
+`./gxr connect status paysim-stream` and check the project's API URL and key.
 This file requires a Kineviz build supporting version 2.1 dashboards; the rendered
 check used the local Desktop 0.19.0 development build documented in
 [VALIDATION.md](../../../docs/VALIDATION.md).

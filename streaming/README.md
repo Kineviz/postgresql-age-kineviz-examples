@@ -39,18 +39,53 @@ not include the planted fraud findings. Running again without that limit
 replays the complete file; already-landed IDs are skipped. Keep the same
 generated fixture while the stream is running.
 
-## Inspect in Kineviz
+## Live dashboard in Kineviz
 
-Use the same SQL connection documented in [connect/](../connect/README.md), and
-replace the graph argument `'paysim'` with `'paysim_stream'` in a PaySim query.
-Repeat the SELECT to see newly landed payments. For an automatically refreshing dashboard, use the
-[adapted PaySim dashboard](../demos/paysim-schemaless/kineviz/). Its database
-sources use the current project connection: register `paysim_stream` in the AGE
-proxy and connect that project to it before importing the dashboard. The default
-`paysim-schemaless` proxy registration still targets the batch graph.
+```bash
+./gxr stream prepare
+./gxr connect up paysim-stream
+```
 
-[`progress.sql`](progress.sql) is a single-query progress view. `isfraud` remains
-synthetic ground truth; it is not a risk score produced by the sink.
+Create or update a **Database Proxy** project using the printed API URL,
+`http://127.0.0.1:9081/api/age/paysim-stream`, and `PROXY_API_KEY` from `.env`.
+This registration reads **`paysim_stream`**. The existing `paysim-schemaless`
+registration continues to read the separate batch graph.
+
+```bash
+./demos/paysim-schemaless/scripts/install-dashboard.sh
+REPLAY_RATE=50 ./gxr stream up
+```
+
+Open **Dashboard → PaySim · PostgreSQL + AGE**. Its database panels poll every
+2–10 seconds. [Dashboard details](../demos/paysim-schemaless/kineviz/).
+For SQL inspection, [`progress.sql`](progress.sql) returns the replay counts.
+`isfraud` remains planted synthetic ground truth, not a sink-generated risk score.
+
+## Start over
+
+```bash
+./gxr stream reset --yes
+REPLAY_RATE=50 ./gxr stream up
+```
+
+`reset` requires `--yes` before taking any action. It stops the producer and sink,
+starts the database/broker if necessary, and waits for the Kafka consumer group
+to become inactive. It then moves that group's position to the current end of
+`paysim-transactions`, so old queued messages cannot refill the cleared graph.
+Only after verifying those offsets does it atomically clear `paysim_stream`'s
+transaction vertices, the `performs` / `to_client` / `to_merchant` / `to_bank`
+edges, and `public.replay_receipts`.
+
+Actors, shared identifiers, identity edges, schema/indexes, credentials, volumes,
+proxy registrations, and all batch graphs remain intact. The producer and sink
+stay stopped after reset, so the dashboard shows zero until you run `stream up`.
+Saved views and existing canvas data are retained; they are snapshots of earlier
+query results, not a live mirror of the database.
+
+If reset fails, writers stay stopped. A Kafka failure leaves payment data intact;
+a SQL failure rolls back the clear. Resolve the reported cause and repeat the
+same reset command before starting the replay. Do not run `up` concurrently with
+`reset`, and do not clear just the receipts or just the graph by hand.
 
 ## Delivery and stop behavior
 

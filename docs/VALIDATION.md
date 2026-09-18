@@ -142,3 +142,40 @@ The dashboard queries passed for the empty replay state, but this check did not
 restart Kafka or claim to observe a new live replay in Desktop. The existing
 canvas and database graphs were preserved. The separate local application fixes
 and tested Desktop version described above still apply.
+
+
+## Replay connection and reset command (2026-09-18)
+
+`./gxr connect up paysim-stream` now registers `paysim_stream` separately and adds
+its traversal indexes. The original `paysim-schemaless` registration continues
+to point to batch `paysim`. The live dashboard installer defaults to the new
+replay registration; an explicit `--proxy-project paysim-schemaless` retains the
+batch option.
+
+The existing **Postgres + AGE** Desktop project was switched to the stream URL.
+The saved API key was verified unchanged after refreshing the running app worker
+to load the earlier credential fix. The prior canvas was saved as **Batch snapshot
+before replay connection** before refreshing the UI. The dashboard rendered
+successfully, and proxy request logs confirmed its polling used
+`/api/age/paysim-stream/query` with successful responses. Its already-complete
+12,033-payment replay was preserved; no reset was performed on that user graph.
+
+`npm run test:reset` creates a separate, randomly named Docker deployment with
+its own PostgreSQL/Kafka volumes and credentials. It verifies:
+
+- No lifecycle action without `--yes`.
+- Reset before a Kafka consumer group exists.
+- A seven-payment replay resets to zero payments, payment edges and receipts,
+  with both writers left stopped.
+- Exact actor, identity-edge and independent batch graph fingerprints survive.
+- Starting only the sink after reset does not consume old messages into the graph.
+- A fresh replay delivers exactly three payments and six edges, followed by a
+  second successful reset. Test-owned volumes are removed afterward.
+
+The test exposed delayed Kafka group release after stopping the container; the
+reset now waits up to 45 seconds for the group to become inactive. Unit tests
+also cover active groups, unowned graphs, Kafka failures, mismatched offsets,
+and SQL rollback. Type checking, 14 unit tests, database integration, proxy
+integration (including both PaySim registrations), dashboard checks, and the
+isolated reset/replay test passed locally. These are local ARM64 results; check
+GitHub Actions for the corresponding committed Linux result.

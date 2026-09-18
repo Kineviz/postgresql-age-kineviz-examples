@@ -84,3 +84,11 @@ assert.equal(cors.headers.get("access-control-allow-private-network"), "true");
 for (let i=0; i<20; i++) await proxyRequest("/api/age/paysim-schemaless/query", {query:"MATCH (n) RETURN n LIMIT 1"});
 assert.equal(rows("SELECT count(*) AS n FROM pg_stat_activity WHERE application_name='kineviz-age-proxy'")[0].n, 0, "Connections must close after requests");
 console.log("Proxy authentication, browser preflight and connection cleanup passed.");
+
+// The live dashboard has a dedicated registration; creating it must not repoint batch.
+await connectCommand("up", "paysim-stream");
+for (const [project, schema] of [["paysim-stream", "paysim_stream"], ["paysim-schemaless", "paysim"]]) {
+  const result = await proxyRequest(`/api/age/${project}/query`, {query: "MATCH (t:transaction) RETURN count(*) AS n"}) as Response;
+  assert.deepEqual(result.data.data, [["n"], [rows(`SELECT count(*) AS n FROM ${schema}.transaction`)[0].n]]);
+}
+console.log("Separate batch and replay proxy registrations verified.");
