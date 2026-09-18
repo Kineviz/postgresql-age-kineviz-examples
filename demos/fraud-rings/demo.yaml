@@ -1,0 +1,11 @@
+slug: fraud-rings
+title: Shared devices and payment rings
+engine: PostgreSQL 16 + Apache AGE 1.6
+graph: fraud_rings
+database: kineviz
+dataset: synthetic
+setup: ./gxr up fraud-rings
+verify: ./gxr verify fraud-rings
+connect: ./gxr connect fraud-rings
+export: ./gxr export fraud-rings
+teardown: ./gxr down fraud-rings --yes

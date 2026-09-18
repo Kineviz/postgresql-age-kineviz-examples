@@ -1,0 +1,27 @@
+name: Verify examples
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  examples:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.3'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck && npm test
+      - run: npm run test:integration
+      - run: npm run test:stream
+      - name: Database logs on failure
+        if: failure()
+        run: docker compose -f compose.yaml -f streaming/compose.yaml logs --tail 100
+      - name: Stop the disposable CI deployment
+        if: always()
+        run: docker compose -f compose.yaml -f streaming/compose.yaml down --volumes

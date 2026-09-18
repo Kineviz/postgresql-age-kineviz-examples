@@ -1,0 +1,15 @@
+{
+  "name": "postgresql-age-kineviz-examples",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=22.18.0"},
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "test:integration": "node --experimental-strip-types tests/integration.ts",
+    "test:stream": "node --experimental-strip-types tests/stream.ts"
+  },
+  "dependencies": {"kafkajs": "2.2.4", "pg": "8.16.3"},
+  "devDependencies": {"@types/node": "22.18.6", "@types/pg": "8.15.5", "typescript": "5.9.2"}
+}

@@ -1,0 +1,11 @@
+slug: paysim-schemaless
+title: PaySim-inspired identity and payment investigation
+engine: PostgreSQL 16 + Apache AGE 1.6
+graph: paysim
+database: kineviz
+dataset: synthetic
+setup: ./gxr up paysim-schemaless
+verify: ./gxr verify paysim-schemaless
+connect: ./gxr connect paysim-schemaless
+export: ./gxr export paysim-schemaless
+teardown: ./gxr down paysim-schemaless --yes

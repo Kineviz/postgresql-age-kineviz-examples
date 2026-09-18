@@ -1,0 +1,11 @@
+slug: edge-fleet
+title: Dependencies across an edge fleet
+engine: PostgreSQL 16 + Apache AGE 1.6
+graph: edge_fleet
+database: kineviz
+dataset: synthetic
+setup: ./gxr up edge-fleet
+verify: ./gxr verify edge-fleet
+connect: ./gxr connect edge-fleet
+export: ./gxr export edge-fleet
+teardown: ./gxr down edge-fleet --yes

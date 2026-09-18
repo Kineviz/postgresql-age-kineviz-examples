@@ -1,0 +1,23 @@
+name: ${COMPOSE_PROJECT_NAME:-postgresql-age-kineviz-examples}
+services:
+  db:
+    # Official release_PG16_1.6.0 multi-architecture manifest, verified 2026-09-18.
+    image: apache/age@sha256:16aa423d20a31aed36a3313244bf7aa00731325862f20ed584510e381f2feaed
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ./gxr up or configure .env}
+      POSTGRES_DB: kineviz
+    # SQL clients open a new session per query. Preloading is essential there;
+    # sending LOAD + SET + SELECT as one multi-statement query is not portable.
+    command: ["postgres", "-c", "session_preload_libraries=age", "-c", "search_path=ag_catalog,public"]
+    ports:
+      - "127.0.0.1:${AGE_PORT:-5455}:5432"
+    volumes:
+      - age-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kineviz"]
+      interval: 2s
+      timeout: 5s
+      retries: 45
+volumes:
+  age-data:
