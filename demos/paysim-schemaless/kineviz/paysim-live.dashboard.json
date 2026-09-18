@@ -1,0 +1,379 @@
+{
+  "version": "2.1",
+  "id": "paysim-age-live",
+  "title": "PaySim · PostgreSQL + AGE",
+  "icon": "user-defined-search-web graphxr-search-web",
+  "layout": {
+    "columns": 12,
+    "rowHeight": 74,
+    "gap": 9
+  },
+  "sources": [
+    {
+      "id": "landed",
+      "kind": "db",
+      "query": "MATCH (t:transaction) RETURN count(*) AS landed",
+      "refresh": {
+        "mode": "interval",
+        "everyMs": 2000
+      }
+    },
+    {
+      "id": "totals",
+      "kind": "db",
+      "query": "MATCH (t:transaction) RETURN round(coalesce(sum(t.amount), 0) / 10000.0) / 100.0 AS volume_m",
+      "refresh": {
+        "mode": "interval",
+        "everyMs": 2000
+      }
+    },
+    {
+      "id": "risk",
+      "kind": "db",
+      "query": "MATCH (t:transaction)\nWITH coalesce(sum(t.amount), 0) AS total,\n     coalesce(sum(CASE WHEN t.isfraud THEN t.amount ELSE 0 END), 0) AS flagged,\n     coalesce(max(CASE WHEN t.isfraud THEN t.amount ELSE 0 END), 0) AS largest\nRETURN round(flagged) AS at_risk,\n       CASE WHEN total > 0 THEN round(10000.0 * flagged / total) / 100.0 ELSE 0.0 END AS pct_value,\n       round(largest) AS biggest",
+      "refresh": {
+        "mode": "interval",
+        "everyMs": 2000
+      }
+    },
+    {
+      "id": "daily",
+      "kind": "db",
+      "query": "MATCH (t:transaction)\nWITH substring(t.timestamp, 0, 10) AS day,\n     CASE WHEN t.isfraud THEN 'fraud' ELSE 'legitimate' END AS kind,\n     t.amount AS amount\nRETURN day, kind, round(sum(amount) * 100.0) / 100.0 AS volume ORDER BY day, kind",
+      "refresh": {
+        "mode": "interval",
+        "everyMs": 2000
+      }
+    },
+    {
+      "id": "bands",
+      "kind": "db",
+      "query": "MATCH (t:transaction)\nWITH CASE WHEN t.amount < 10 THEN 0 WHEN t.amount < 100 THEN 1\n          WHEN t.amount < 1000 THEN 2 WHEN t.amount < 10000 THEN 3\n          WHEN t.amount < 100000 THEN 4 ELSE 5 END AS decade, t.isfraud AS flagged\nWITH decade, count(*) AS total, sum(CASE WHEN flagged THEN 1 ELSE 0 END) AS frauds\nRETURN decade, CASE decade WHEN 0 THEN 'under $10' WHEN 1 THEN '$10–99'\n       WHEN 2 THEN '$100–999' WHEN 3 THEN '$1k–10k' WHEN 4 THEN '$10k–100k' ELSE '$100k+' END AS band,\n       round(1000.0 * frauds / total) / 10.0 AS percent_fraud ORDER BY decade",
+      "refresh": {
+        "mode": "interval",
+        "everyMs": 2000
+      }
+    },
+    {
+      "id": "verdict",
+      "kind": "db",
+      "query": "MATCH (a:client)-[left_identity]->(i)<-[right_identity]-(b:client)\nWHERE type(left_identity) IN ['has_ssn', 'has_email', 'has_phone']\n  AND type(right_identity) IN ['has_ssn', 'has_email', 'has_phone'] AND id(a) <> id(b)\nOPTIONAL MATCH (a)-[:performs]->(t:transaction)-[:to_client]->(b)\nWITH i, count(t) AS transfers\nWITH CASE WHEN transfers > 0 THEN 'shared + transfers' ELSE 'shared only' END AS verdict\nRETURN verdict, count(*) AS identities ORDER BY verdict",
+      "refresh": {
+        "mode": "interval",
+        "everyMs": 10000
+      }
+    },
+    {
+      "id": "suspects",
+      "kind": "db",
+      "query": "MATCH (c:client)-[:performs]->(t:transaction) WHERE t.isfraud\nWITH c.name AS suspect, count(*) AS txns, round(sum(t.amount) * 100.0) / 100.0 AS moved\nRETURN suspect, txns, moved\nORDER BY moved DESC, suspect LIMIT 8",
+      "refresh": {
+        "mode": "interval",
+        "everyMs": 10000
+      }
+    },
+    {
+      "id": "ringFanIn",
+      "kind": "db",
+      "query": "MATCH (a:client)-[left_identity]->(i)<-[right_identity]-(b:client)\nWHERE type(left_identity) IN ['has_ssn', 'has_email', 'has_phone']\n  AND type(right_identity) IN ['has_ssn', 'has_email', 'has_phone'] AND id(a) <> id(b)\nWITH DISTINCT a\nMATCH (a)-[:performs]->(t:transaction)-[:to_client]->(r:client)\nWITH r.name AS collector, round(sum(t.amount) * 100.0) / 100.0 AS received\nRETURN collector, received\nORDER BY received DESC, collector LIMIT 8",
+      "refresh": {
+        "mode": "interval",
+        "everyMs": 10000
+      }
+    },
+    {
+      "id": "mules",
+      "kind": "db",
+      "query": "MATCH (:client)-[:performs]->(t:transaction)-[:to_client]->(m:client) WHERE m.client_type = 'MULE'\nWITH m.name AS mule, round(sum(t.amount) * 100.0) / 100.0 AS taken\nRETURN mule, taken\nORDER BY taken DESC, mule LIMIT 10",
+      "refresh": {
+        "mode": "interval",
+        "everyMs": 10000
+      }
+    },
+    {
+      "id": "exitRisk",
+      "kind": "db",
+      "query": "MATCH (t:transaction)-[:to_merchant]->(m:merchant)\nWITH CASE WHEN m.highrisk THEN 'high-risk merchants' ELSE 'normal merchants' END AS destination, t.amount AS amount\nRETURN destination, 'merchant cash-out' AS channel, round(sum(amount) * 100.0) / 100.0 AS volume\nORDER BY destination",
+      "refresh": {
+        "mode": "interval",
+        "everyMs": 10000
+      }
+    },
+    {
+      "id": "sel",
+      "kind": "canvasSelection",
+      "refresh": {
+        "mode": "onSelect"
+      }
+    }
+  ],
+  "widgets": [
+    {
+      "id": "kpiLanded",
+      "type": "kpi",
+      "title": "Transactions landed",
+      "sourceId": "landed",
+      "enc": {
+        "value": "landed",
+        "agg": "max"
+      },
+      "w": 3,
+      "h": 2
+    },
+    {
+      "id": "kpiVolume",
+      "type": "kpi",
+      "title": "Volume moved ($M)",
+      "sourceId": "totals",
+      "enc": {
+        "value": "volume_m",
+        "agg": "max"
+      },
+      "w": 3,
+      "h": 2
+    },
+    {
+      "id": "kpiAtRisk",
+      "type": "kpi",
+      "title": "Fraud-labelled value ($)",
+      "sourceId": "risk",
+      "enc": {
+        "value": "at_risk",
+        "agg": "max"
+      },
+      "w": 3,
+      "h": 2
+    },
+    {
+      "id": "kpiBiggest",
+      "type": "kpi",
+      "title": "Largest fraud-labelled payment ($)",
+      "sourceId": "risk",
+      "enc": {
+        "value": "biggest",
+        "agg": "max"
+      },
+      "w": 3,
+      "h": 2
+    },
+    {
+      "id": "gaugeValue",
+      "type": "gauge",
+      "title": "Fraud as % of VALUE moved",
+      "sourceId": "risk",
+      "enc": {
+        "value": "pct_value",
+        "agg": "max"
+      },
+      "target": 5,
+      "warn": 2,
+      "crit": 4,
+      "w": 3,
+      "h": 3
+    },
+    {
+      "id": "dailyVolume",
+      "type": "timeseries",
+      "title": "Volume per simulated day — fraud stacked on top",
+      "sourceId": "daily",
+      "chart": {
+        "spec": {
+          "chartType": "Area Chart",
+          "encodings": {
+            "x": {
+              "field": "day"
+            },
+            "y": {
+              "field": "volume"
+            },
+            "color": {
+              "field": "kind"
+            }
+          }
+        },
+        "semanticTypes": {
+          "day": "Time",
+          "volume": "Quantity",
+          "kind": "Nominal"
+        },
+        "colors": {
+          "fraud": "#c9635b",
+          "legitimate": "#5aa9e6"
+        }
+      },
+      "w": 9,
+      "h": 3
+    },
+    {
+      "id": "verdictSplit",
+      "type": "bars",
+      "title": "Shared identities — is there transfer evidence?",
+      "sourceId": "verdict",
+      "chart": {
+        "spec": {
+          "chartType": "Pie Chart",
+          "encodings": {
+            "color": {
+              "field": "verdict"
+            },
+            "size": {
+              "field": "identities"
+            }
+          }
+        },
+        "semanticTypes": {
+          "verdict": "Nominal",
+          "identities": "Quantity"
+        },
+        "colors": {
+          "shared + transfers": "#c9635b",
+          "shared only": "#6f7787"
+        }
+      },
+      "w": 4,
+      "h": 4
+    },
+    {
+      "id": "suspectList",
+      "type": "table",
+      "title": "Who moved the fraud money",
+      "sourceId": "suspects",
+      "enc": {
+        "label": "suspect",
+        "value": "moved"
+      },
+      "w": 4,
+      "h": 4
+    },
+    {
+      "id": "ringMoney",
+      "type": "bars",
+      "title": "Where money from identity-sharing accounts lands",
+      "sourceId": "ringFanIn",
+      "chart": {
+        "spec": {
+          "chartType": "Bar Chart",
+          "encodings": {
+            "x": {
+              "field": "collector"
+            },
+            "y": {
+              "field": "received"
+            }
+          }
+        },
+        "semanticTypes": {
+          "collector": "Nominal",
+          "received": "Quantity"
+        }
+      },
+      "sort": "valueDesc",
+      "w": 4,
+      "h": 4
+    },
+    {
+      "id": "bandRisk",
+      "type": "bars",
+      "title": "% of each size band that is fraud",
+      "sourceId": "bands",
+      "chart": {
+        "spec": {
+          "chartType": "Lollipop Chart",
+          "encodings": {
+            "x": {
+              "field": "band"
+            },
+            "y": {
+              "field": "percent_fraud"
+            }
+          }
+        },
+        "semanticTypes": {
+          "band": "Nominal",
+          "percent_fraud": "Quantity"
+        }
+      },
+      "w": 4,
+      "h": 4,
+      "color": "#c9635b"
+    },
+    {
+      "id": "muleTake",
+      "type": "bars",
+      "title": "Taken by mules ($)",
+      "sourceId": "mules",
+      "chart": {
+        "spec": {
+          "chartType": "Bar Chart",
+          "encodings": {
+            "x": {
+              "field": "mule"
+            },
+            "y": {
+              "field": "taken"
+            }
+          }
+        },
+        "semanticTypes": {
+          "mule": "Nominal",
+          "taken": "Quantity"
+        }
+      },
+      "sort": "valueDesc",
+      "w": 4,
+      "h": 4
+    },
+    {
+      "id": "exitBar",
+      "type": "bars",
+      "title": "Where value leaves the network",
+      "sourceId": "exitRisk",
+      "chart": {
+        "spec": {
+          "chartType": "Stacked Bar Chart",
+          "encodings": {
+            "x": {
+              "field": "channel"
+            },
+            "color": {
+              "field": "destination"
+            },
+            "y": {
+              "field": "volume"
+            }
+          }
+        },
+        "semanticTypes": {
+          "channel": "Nominal",
+          "destination": "Nominal",
+          "volume": "Quantity"
+        },
+        "colors": {
+          "high-risk merchants": "#c9971f",
+          "normal merchants": "#6f7787"
+        }
+      },
+      "w": 4,
+      "h": 4
+    },
+    {
+      "id": "kpiSelected",
+      "type": "kpi",
+      "title": "Selected on canvas",
+      "sourceId": "sel",
+      "enc": {
+        "agg": "count"
+      },
+      "w": 3,
+      "h": 2
+    },
+    {
+      "id": "notes",
+      "type": "markdown",
+      "title": "Reading this as an investigator",
+      "text": "**Synthetic ground truth.** Fraud charts use the fixture’s planted `isfraud` flags; they are not predictions. The gauge measures fraud-labelled value as a share of all payment value.\n\n**Shared identity is a lead.** “Shared + transfers” means at least one direct payment between holders of a shared identifier. “Shared only” means no such payment is present in this graph. Neither is a fraud verdict.\n\n**Current project connection.** These panels query PostgreSQL + AGE through Database Proxy every 2–10 seconds. The batch `paysim` graph is already loaded, so totals stay steady. A project connected to `paysim_stream` follows the separate finite Kafka replay. Selecting nodes on the canvas updates the selection count.",
+      "w": 9,
+      "h": 3
+    }
+  ]
+}

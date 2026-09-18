@@ -7,6 +7,7 @@ import {countsQuery, cypher, identifier, loadStatements, sqlString} from "./age.
 import {config, compose, generated, root, rows, run, sql, start} from "./runtime.ts";
 import {csvRows} from "./csv.ts";
 import {connectCommand} from "./connect.ts";
+import {dashboardCommand} from "./dashboard.ts";
 
 function dataFor(demo: Demo): Dataset {
   const dir = generated(demo);
@@ -117,7 +118,7 @@ function stream(action: string | undefined): void {
 async function main(): Promise<void> {
   const [command, arg, extra] = process.argv.slice(2);
   if (!command || command === "help" || command === "--help") {
-    console.log("gxr list | up <demo> | verify <demo> | query <demo> <file.sql> | export <demo>\n    connect up <demo> | connect status [demo] | connect down\n    generate <demo> | down <demo> --yes | db start|status|stop | stream prepare|up|status|down"); return;
+    console.log("gxr list | up <demo> | verify <demo> | query <demo> <file.sql> | export <demo>\n    connect up <demo> | connect status [demo] | connect down\n    dashboard install [projectId] [--url http://host:port]\n    generate <demo> | down <demo> --yes | db start|status|stop | stream prepare|up|status|down"); return;
   }
   if (command === "list") { for (const [slug, demo] of Object.entries(demos)) console.log(`${slug}: ${demo.title}`); return; }
   if (command === "db") {
@@ -126,6 +127,10 @@ async function main(): Promise<void> {
     else if (arg === "stop") compose(["stop", "db"], undefined, true);
     else throw new Error("Use ./gxr db start|status|stop");
     return;
+  }
+  if (command === "dashboard") {
+    if (arg !== "install") throw new Error("Use ./gxr dashboard install [projectId] [--url http://host:port]");
+    await dashboardCommand(process.argv.slice(4)); return;
   }
   if (command === "stream") { stream(arg); return; }
   if (command === "connect" && ["up", "status", "down"].includes(arg)) { await connectCommand(arg, extra); return; }

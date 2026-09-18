@@ -52,3 +52,15 @@ Use Database Proxy as described in the [connection guide](../../connect/README.m
 Paste the Cypher files in [`queries/graph/`](queries/graph/) into Kineviz's
 **Query** tab. They return nodes, edges and paths directly; the SQL files remain
 available for tables and manual mapping.
+
+## Dashboard
+
+After creating the Database Proxy project in Desktop, run from the repo root:
+
+```bash
+./demos/paysim-schemaless/scripts/install-dashboard.sh
+```
+
+Open **Dashboard → PaySim · PostgreSQL + AGE**. The 14 widgets query AGE
+automatically. Batch totals stay steady; the separate Kafka replay requires a
+project connected to `paysim_stream`. See [installation and refresh details](kineviz/).

@@ -37,8 +37,8 @@ npm run test:stream
 The original integration suite exercises PostgreSQL sessions equivalent to the Kineviz SQL
 backend and validates the exact query files. **The SQL Mapping Editor was not
 exercised in this validation.** The separate Desktop proxy check is recorded below. Mapping instructions
-are provided separately. The original Spanner project archive and dashboard are
-not included as AGE-compatible assets.
+are provided separately. The original Spanner project archive is not included as an AGE-compatible asset.
+The separately adapted AGE dashboard is verified below.
 
 Local evidence above is ARM64. The GitHub Actions workflow also runs these checks
 on Ubuntu; consult its result for the committed revision rather than assuming
@@ -110,3 +110,35 @@ The application fixes were made in the separate local Kineviz checkout; this
 examples repository does not distribute a patched Desktop build. Newly generated
 API keys now use a `gxr_` prefix to avoid the older encryption heuristic without
 changing existing keys.
+
+
+## Adapted PaySim dashboard and installer (2026-09-18)
+
+The Spanner-style `demos/paysim-schemaless/scripts/install-dashboard.sh` entry
+point now installs `kineviz/paysim-live.dashboard.json` through Desktop's Files
+API. All ten database sources use AGE Cypher; the spec passes Kineviz's own
+`validateDashboardSpec` validator. Type checking, all nine unit tests, the
+existing database integration suite, and `npm run test:dashboard` passed locally.
+The dashboard check compares every returned value and column name with independent
+calculations from the generated fixture, then tests all ten queries with actors
+and identifiers but zero payments in a temporary graph that is rolled back.
+Installer tests cover project matching, ambiguous selection, first install,
+reinstall, backup of edits, unrelated entries and pin preservation, and refusal
+to treat an authentication/server error or malformed manifest as an empty library.
+
+The installer detected the existing **Postgres + AGE** Desktop project, wrote the
+spec and manifest, and read both back successfully. Opening **Dashboard →
+PaySim · PostgreSQL + AGE** in the actual Electron application rendered:
+
+- 12,033 transactions, $11.06M moved, $321,337 fraud-labelled value (rounded),
+  $250,000 largest fraud-labelled payment, and 2.91% of payment value flagged.
+- The daily area chart, shared-identity chart, account table, recipient rankings,
+  amount bands, mule recipients, and merchant destinations.
+- Four shared identifiers with direct-transfer evidence and four without it,
+  matching the fixture independently; these are not fraud predictions.
+
+This check used the completed batch graph through the existing AGE proxy.
+The dashboard queries passed for the empty replay state, but this check did not
+restart Kafka or claim to observe a new live replay in Desktop. The existing
+canvas and database graphs were preserved. The separate local application fixes
+and tested Desktop version described above still apply.

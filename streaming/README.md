@@ -43,8 +43,11 @@ generated fixture while the stream is running.
 
 Use the same SQL connection documented in [connect/](../connect/README.md), and
 replace the graph argument `'paysim'` with `'paysim_stream'` in a PaySim query.
-Repeat the SELECT to see newly landed payments. The supplied SQL panel route
-does not promise automatic dashboard refresh or native graph expansion.
+Repeat the SELECT to see newly landed payments. For an automatically refreshing dashboard, use the
+[adapted PaySim dashboard](../demos/paysim-schemaless/kineviz/). Its database
+sources use the current project connection: register `paysim_stream` in the AGE
+proxy and connect that project to it before importing the dashboard. The default
+`paysim-schemaless` proxy registration still targets the batch graph.
 
 [`progress.sql`](progress.sql) is a single-query progress view. `isfraud` remains
 synthetic ground truth; it is not a risk score produced by the sink.

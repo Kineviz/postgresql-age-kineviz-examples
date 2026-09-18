@@ -76,7 +76,8 @@ column migration. A new label creates a new backing relation.
 
 Kineviz's PostgreSQL **property-graph** connector uses SQL/PGQ (`GRAPH_TABLE`),
 which is a different interface. This repo connects AGE through Database Proxy; it does not add a native AGE
-connector or reuse the original Spanner dashboard/project archive. An optional
+connector. The [PaySim dashboard](demos/paysim-schemaless/kineviz/) is adapted
+with AGE queries; the original Spanner project archive is not reused. An optional
 [SQL panel route](connect/SQL.md) remains available for tabular results.
 
 ## Commands
@@ -100,6 +101,18 @@ connector or reuse the original Spanner dashboard/project archive. An optional
 To recreate a demo, use its explicit `down ... --yes` command followed by `up`.
 Other demo graphs and the volume remain intact. An unregistered graph with a
 reserved demo name is refused rather than replaced.
+
+## PaySim dashboard
+
+After connecting a PaySim Database Proxy project in Kineviz Desktop:
+
+```bash
+./demos/paysim-schemaless/scripts/install-dashboard.sh
+```
+
+Open **Dashboard → PaySim · PostgreSQL + AGE**. The installer finds the matching
+project, saves the 14-widget dashboard, and preserves other library entries.
+[Load instructions and replay behavior](demos/paysim-schemaless/kineviz/README.md).
 
 ## Streaming replay
 
@@ -139,6 +152,7 @@ npm test
 npm run test:integration             # requires Docker; loads all three demos
 npm run test:stream                  # Kafka replay + complete graph comparison
 npm run test:proxy                   # proxy API + graph operations on all demos
+npm run test:dashboard               # ten dashboard queries + empty replay state
 ```
 
 The CLI, loaders, streaming runtime, and integration tests are TypeScript and
