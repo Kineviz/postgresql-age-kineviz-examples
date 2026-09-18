@@ -35,8 +35,8 @@ npm run test:stream
 ```
 
 The original integration suite exercises PostgreSQL sessions equivalent to the Kineviz SQL
-backend and validates the exact query files. **The Kineviz desktop UI and its
-Mapping Editor were not exercised in this validation.** Mapping instructions
+backend and validates the exact query files. **The SQL Mapping Editor was not
+exercised in this validation.** The separate Desktop proxy check is recorded below. Mapping instructions
 are provided separately. The original Spanner project archive and dashboard are
 not included as AGE-compatible assets.
 
@@ -81,3 +81,32 @@ preference. A test added one temporary property to one synthetic fixture node;
 it was removed and absence verified. The driver now rejects mutation/procedure
 clauses before execution, and tests cover that guard. This corrects the broader
 read-only claim in the original verification record.
+
+## Rendered Kineviz Desktop check (2026-09-18)
+
+Tested the local Kineviz Desktop 0.19.0 development build in the `Postgres + AGE`
+project against `/api/age/paysim-schemaless`. This exposed an application bug:
+the old encryption heuristic treated the generated 48-character hexadecimal key
+as ciphertext, then corrupted it on read. The browser rejected its authentication
+header before sending a request; the empty schema placeholder caused the secondary
+`forEach` exception.
+
+After fixing proxy-key encryption in Kineviz's SQLite and MongoDB save paths,
+making schema conversion accept arrays and legacy object maps, and repairing the
+saved key representation, the actual Desktop Query tab successfully ran:
+
+```cypher
+MATCH (n)-[r]->(m) RETURN n, r, m LIMIT 50
+```
+
+The query reported **59 nodes, 50 edges, 0.15 seconds**. With "Load Inner
+Relationship" enabled, the canvas showed **59 nodes and 51 edges**. Loaded
+metadata contained all seven PaySim categories and seven relationship endpoint
+pairs. Neither the invalid-header error nor the schema conversion warning
+recurred. This verifies querying and schema loading in the rendered Desktop;
+the expansion checks above remain source-adapter and HTTP tests.
+
+The application fixes were made in the separate local Kineviz checkout; this
+examples repository does not distribute a patched Desktop build. Newly generated
+API keys now use a `gxr_` prefix to avoid the older encryption heuristic without
+changing existing keys.

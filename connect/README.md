@@ -42,7 +42,8 @@ Subsequent builds reuse Docker's cache. Dependency versions are recorded in
 pinned checkout inside the image, not to another local proxy installation.
 
 `connect up` adds random `PROXY_API_KEY` and `PROXY_ADMIN_PASSWORD` values to
-`.env` when absent. Existing passwords are preserved. Database credentials stay
+`.env` when absent. New API keys start with `gxr_` for compatibility with older
+Kineviz credential handling; existing keys and passwords are preserved. Database credentials stay
 in the proxy container; the project registration references its environment
 variable rather than saving the database password in `projects.json`.
 
@@ -142,8 +143,16 @@ Use a recent Kineviz build supporting the proxy's `/capabilities` and typed
 `/expand`/`/pullCategory`/`/pullRelationship` endpoints. Older builds may execute
 handwritten queries but generate incompatible expansion statements. Verification
 of the HTTP contract and a limitation in Kineviz's legacy internal-edge helper
-are recorded in [VALIDATION.md](../docs/VALIDATION.md);
-do not infer a Desktop UI pass from it.
+are recorded in [VALIDATION.md](../docs/VALIDATION.md), along with the separate
+Desktop query verification and its application fixes.
+
+If an older Desktop build reports `String contains non ISO-8859-1 code point`
+after saving an all-hexadecimal API key, its credential handler may have mistaken
+the key for encrypted data. The ensuing `schema.maps.forEach is not a function`
+warning comes from Kineviz's empty schema placeholder. Use a Kineviz build with
+the proxy-key encryption fix, or use a prefixed API key consistently in the
+proxy's `.env` and every connected project's settings. Updating this repository
+does not rotate existing keys or update the Desktop application automatically.
 
 ### Connect your own AGE graph
 

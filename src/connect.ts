@@ -65,7 +65,12 @@ export async function connectCommand(action: string | undefined, slug?: string):
   let env = config();
   // Add only missing keys; never replace existing passwords or other settings.
   for (const key of ["PROXY_API_KEY", "PROXY_ADMIN_PASSWORD"]) {
-    if (!env[key]) appendFileSync(join(root, ".env"), `\n${key}=${randomBytes(24).toString("hex")}\n`);
+    if (!env[key]) {
+      // Older Kineviz builds mistake long alphanumeric API keys for encrypted
+      // values when saving a project. The prefix avoids that legacy heuristic.
+      const prefix = key === "PROXY_API_KEY" ? "gxr_" : "";
+      appendFileSync(join(root, ".env"), `\n${key}=${prefix}${randomBytes(24).toString("hex")}\n`);
+    }
   }
   env = config();
   proxyCompose(["up", "-d", "--build", "--wait", "--no-deps", "proxy"]);
