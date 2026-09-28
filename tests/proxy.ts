@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {readFileSync, readdirSync} from "node:fs";
 import {config, rows} from "../src/runtime.ts";
-import {connectCommand, proxyBase, proxyRequest} from "../src/connect.ts";
+import {connectCommand, proxyBase, proxyRequest} from "../src/legacy-proxy.ts";
 import {demos} from "../src/model.ts";
 
 type Graph = {nodes: {id: string; labels: string[]; properties: Record<string, unknown>}[];

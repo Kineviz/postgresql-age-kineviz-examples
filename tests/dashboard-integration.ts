@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {join} from "node:path";
 import {randomUUID} from "node:crypto";
-import {proxyRequest} from "../src/connect.ts";
+import {nativeSql} from "../src/connect.ts";
 import {generated, sql} from "../src/runtime.ts";
 import {specFile} from "../src/dashboard.ts";
 import type {Dataset} from "../src/model.ts";
@@ -58,12 +58,17 @@ const expected: Record<string, unknown[][]> = {
   exitRisk: sums(payments.filter(t => merchantDest.has(t.id)), t => nodes.get(merchantDest.get(t.id)!)!.properties.highrisk ? "high-risk merchants" : "normal merchants").map(([k,v]) => [k, "merchant cash-out", v]),
 };
 const headers: Record<string, string[]> = {landed:["landed"], totals:["volume_m"], risk:["at_risk","pct_value","biggest"], daily:["day","kind","volume"], bands:["decade","band","percent_fraud"], verdict:["verdict","identities"], suspects:["suspect","txns","moved"], ringFanIn:["collector","received"], mules:["mule","taken"], exitRisk:["destination","channel","volume"]};
+const textFields = new Set(["day", "kind", "band", "verdict", "suspect", "collector", "mule", "destination", "channel"]);
 const stable = (values: unknown[][]) => values.map(v => JSON.stringify(v)).sort();
 for (const source of spec.sources.filter(s => s.kind === "db")) {
-  const result = await proxyRequest("/api/age/paysim-schemaless/query", {query: source.query}) as {data: {type: string; data: unknown[][]}};
-  assert.equal(result.data.type, "TABLE", source.id);
-  assert.deepEqual(result.data.data[0], headers[source.id], `${source.id} headers`);
-  assert.deepEqual(stable(result.data.data.slice(1)), stable(expected[source.id]), `${source.id} fixture values`);
+  const cols = headers[source.id].map(h => `"${h}" agtype`).join(", ");
+  // Explicit scalar casts preserve numbers without interpreting string values
+  // as JSON; AGE's text cast already unwraps its string quotes.
+  const typedCols = headers[source.id].map(h => `"${h}"::${textFields.has(h) ? "text" : "float8"} AS "${h}"`).join(", ");
+  const result = JSON.parse(nativeSql(`SELECT coalesce(json_agg(row_to_json(q)), '[]'::json) FROM (SELECT ${typedCols} FROM (${cypher("paysim", source.query, cols)}) c) q;`)) as Record<string, unknown>[];
+  assert.ok(result.length, source.id);
+  assert.deepEqual(Object.keys(result[0]), headers[source.id], `${source.id} headers`);
+  assert.deepEqual(stable(result.map(row => headers[source.id].map(h => row[h]))), stable(expected[source.id]), `${source.id} fixture values`);
   console.log(`Dashboard ${source.id}: fixture totals and table headers verified.`);
 }
 // A replay starts with identities and no payments. Exercise that state without

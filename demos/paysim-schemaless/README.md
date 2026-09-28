@@ -48,21 +48,21 @@ Other graphs are preserved. `./gxr db stop` keeps the database volume.
 
 ## Live graph queries
 
-Use Database Proxy as described in the [connection guide](../../connect/README.md).
+Use native **Apache AGE** as described in the [connection guide](../../connect/README.md).
 Paste the Cypher files in [`queries/graph/`](queries/graph/) into Kineviz's
 **Query** tab. They return nodes, edges and paths directly; the SQL files remain
 available for tables and manual mapping.
 
 ## Live dashboard and reset
 
-Prepare the separate replay graph and its proxy registration:
+Prepare the separate replay graph and native reader:
 
 ```bash
 ./gxr stream prepare
 ./gxr connect up paysim-stream
 ```
 
-Connect the Desktop project to the printed `paysim-stream` Database Proxy URL,
+Connect an **Apache AGE** Desktop project using the printed fields and Graph Name `paysim_stream`,
 then run from the repo root:
 
 ```bash

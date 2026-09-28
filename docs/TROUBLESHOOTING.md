@@ -32,16 +32,31 @@ See [connect/README.md](../connect/README.md).
 
 **Kineviz rejects PostgreSQL version / asks for `GRAPH_TABLE`:** the selected
 connector is the SQL/PGQ property-graph connector. For AGE run `./gxr connect up
-<demo>` and choose **Database Proxy**. See [connect](../connect/README.md).
+<demo>` and choose **Apache AGE**. See [connect](../connect/README.md).
 
 **Host not allowed in Query → SQL:** the SQL backend rejected the host against
-its allowlist before database authentication. The Database Proxy route above is
-a separate transport. For SQL, an administrator must allow the specific host;
+its allowlist before database authentication. The native Apache AGE project connection above is
+a separate route. For SQL, an administrator must allow the specific host;
 the Server field must include the port, for example `127.0.0.1:5455`.
 
-**Proxy connection fails:** run `./gxr connect status <demo>`. Confirm the URL
-uses port 9081 (or `PROXY_PORT`) and the API key is `PROXY_API_KEY`. See the
-[proxy troubleshooting guide](../connect/README.md#troubleshooting-the-connection).
+**Native connection fails / unrecognized database error:** run
+`./gxr connect up <demo>` and copy its six fields into **Apache AGE**. The native
+login is `kineviz_native_reader`, its password is `KINEVIZ_NATIVE_PASSWORD`, and
+Graph Name is `paysim_stream` for replay or `paysim` for batch. Older all-hex
+passwords can be mistaken for encrypted credentials by Kineviz; the new reader
+uses a prefixed password without rotating the old login. A generic banner alone
+does not prove this is the cause; run `./gxr connect status <demo>` and inspect
+the Desktop technical details. See [connection troubleshooting](../connect/README.md#verify-and-troubleshoot).
+
+**`access to library "age" is not allowed`:** native reader sessions cannot load
+arbitrary libraries. The included server already preloads AGE and the native
+role has an explicit search path. Do not promote it to superuser. Confirm the
+subsequent graph query with `connect status`; on another server, its administrator
+must configure AGE session initialization.
+
+**Legacy proxy:** use `./gxr proxy status <demo>` only if deliberately retaining
+an older proxy project. The native connection does not use port 9081 or an API key.
+See [legacy compatibility](../connect/LEGACY-PROXY.md).
 
 **No rows after `LOAD; SET; SELECT` in a GUI:** the client may only handle one
 result object. Use per-session server initialization and a single SELECT, as
@@ -59,6 +74,7 @@ than skipping offsets. `./gxr stream up` starts stopped services without clearin
 the graph, Kafka log, or receipts. It can replay a completed producer again;
 receipts prevent duplicate graph writes.
 
-**Stopping everything:** run `./gxr connect down` and `./gxr stream down` before `./gxr db stop`. These
+**Stopping everything:** run `./gxr stream down` before `./gxr db stop`. If an old
+proxy is still running and no project needs it, use `./gxr proxy down`. These
 commands keep both data volumes. There is intentionally no automatic whole-volume
 destroy command in the demo CLI.

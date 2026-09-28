@@ -1,5 +1,52 @@
 # Verification record
 
+## Native Apache AGE migration — 2026-09-28
+
+Verified on an isolated ARM64 Docker deployment with PostgreSQL **16.10** and
+AGE **1.6.0**, using the unchanged pinned image and new native reader:
+
+- TypeScript checks and all **24 unit tests** passed, including native project
+  matching and dashboard backup/readback behavior.
+- All three datasets and **24 analytical/canvas SQL queries** passed. Repeated
+  setup preserved counts, exports retained endpoints, writes were denied and
+  replay mutations remained idempotent.
+- `npm run test:native` passed for `fraud_rings`, `edge_fleet`, `paysim` and
+  `paysim_stream`: TCP authentication, incorrect-password rejection, catalog
+  and property discovery, graph/path queries, exact ID selection, restricted
+  privileges and repeat setup without credential rotation. No proxy was started.
+- `npm run test:dashboard` verified **all ten sources** against fixture-derived
+  totals through the native reader, then verified the zero-payment state inside
+  a rolled-back temporary graph.
+- The actual Kineviz native connection, translation, schema and result-mapping
+  modules at GraphXR revision `e08995079bc4737cdbf9aa518746ec5c0114eb85` were
+  separately bundled and exercised against this database. All four graph
+  connections, all six example graph/path queries, and all ten dashboard queries
+  on both batch and empty replay graphs passed. This test used a default test
+  encryption configuration and plaintext prefixed credentials, not a running
+  Desktop project or authenticated Files API.
+
+The native migration was **not visually verified in Desktop** in this pass.
+The installer is tested against the Files API contract with mocks; native project
+matching uses Kineviz's current top-level `apacheAge` connection fields. The
+native connector's denied `LOAD 'age'` attempt does not break these tests because
+AGE is preloaded by the server and the reader search path is configured.
+
+Reproduce database checks after `npm ci --ignore-scripts`:
+
+```bash
+npm run typecheck
+npm test
+npm run test:integration
+npm run test:native
+npm run test:dashboard
+```
+
+## Historical verification (Database Proxy workflow)
+
+The records below describe the earlier proxy-based integration. New setups use
+[native Apache AGE](../connect/README.md); legacy proxy commands are now
+`./gxr proxy up|status|down`.
+
 Verified locally on **2026-09-18**, using Docker Desktop on ARM64:
 
 - PostgreSQL **16.10**, Apache AGE extension **1.6.0**.

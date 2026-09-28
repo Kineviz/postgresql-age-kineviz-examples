@@ -11,27 +11,33 @@ export interface DashboardSpec {
 }
 type Metadata = Record<string, unknown> & {id: string};
 export interface Manifest {dashboards: Metadata[]; [key: string]: unknown}
-export interface Project { _id: string; projectName: string; databaseType: string; hostname: string }
+export interface Project {
+  _id: string; projectName: string; databaseType: string; hostname: string;
+  boltPort?: string | number; port?: string | number; database?: string;
+  currentDB?: string; currentNeo4jDB?: string; graphName?: string;
+}
+export interface NativeTarget {host: string; port: number; database: string; graph: string}
 export const specFile = join(root, "demos/paysim-schemaless/kineviz/paysim-live.dashboard.json");
 const indexPath = "dashboards/_index.json";
 
-function normalizeUrl(value: string): string {
-  const url = new URL(value);
-  if (url.hostname === "localhost") url.hostname = "127.0.0.1";
-  return url.href.replace(/\/+$/, "");
+function normalizeHost(value: string): string {
+  const host = value.trim().toLowerCase();
+  return host === "localhost" ? "127.0.0.1" : host;
 }
-export function chooseProject(projects: Project[], proxyUrl: string, projectId?: string): Project {
+export function chooseProject(projects: Project[], target: NativeTarget, projectId?: string): Project {
+  const description = `${target.host}:${target.port}/${target.database}, graph ${target.graph}`;
   const matches = projects.filter(p => {
-    try { return p.databaseType === "databaseProxy" && normalizeUrl(p.hostname) === normalizeUrl(proxyUrl); }
-    catch { return false; }
+    const database = [p.database, p.currentDB, p.currentNeo4jDB].find(v => v && !["neo4j", "default"].includes(v));
+    return p.databaseType === "apacheAge" && normalizeHost(p.hostname) === normalizeHost(target.host) &&
+      Number(p.boltPort || p.port || 5432) === target.port && database === target.database && p.graphName === target.graph;
   });
   if (projectId) {
     const selected = matches.find(p => p._id === projectId);
-    if (!selected) throw new Error(`Project ${projectId} is not connected to this AGE proxy (${proxyUrl}). Check its Database Proxy settings.`);
+    if (!selected) throw new Error(`Project ${projectId} is not connected to native Apache AGE (${description}). Check its database settings.`);
     return selected;
   }
   if (matches.length === 1) return matches[0];
-  if (!matches.length) throw new Error(`No project is connected to ${proxyUrl}. Create a Database Proxy project in Kineviz Desktop first.`);
+  if (!matches.length) throw new Error(`No project is connected to native Apache AGE (${description}). Create an Apache AGE project in Kineviz Desktop first.`);
   throw new Error(`Several projects match; pass a project ID: ${matches.map(p => `${p.projectName} (${p._id})`).join(", ")}`);
 }
 export function parseManifest(raw: string | null): Manifest {
@@ -130,25 +136,25 @@ function desktopUrls(): string[] {
 }
 export async function dashboardCommand(args: string[]): Promise<void> {
   let url = process.env.KINEVIZ_URL, projectId: string | undefined, json = false;
-  let proxyProject = "paysim-stream";
+  let graph = "paysim_stream";
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--help") {
-      console.log("Usage: ./demos/paysim-schemaless/scripts/install-dashboard.sh [projectId] [--url http://host:port] [--proxy-project name] [--json]"); return;
+      console.log("Usage: ./demos/paysim-schemaless/scripts/install-dashboard.sh [projectId] [--url http://host:port] [--graph paysim_stream|paysim] [--json]"); return;
     }
     if (arg === "--json") { json = true; continue; }
-    if (arg === "--url" || arg === "--proxy-project") {
+    if (arg === "--url" || arg === "--graph") {
       const value = args[++i];
       if (!value || value.startsWith("--")) throw new Error(`${arg} requires a value`);
-      if (arg === "--url") url = value; else proxyProject = value;
+      if (arg === "--url") url = value; else graph = value;
       continue;
     }
     if (arg.startsWith("-") || projectId) throw new Error(`Unexpected argument: ${arg}`);
     projectId = arg;
   }
-  if (!/^[a-zA-Z0-9_-]+$/.test(proxyProject)) throw new Error("Invalid proxy project name");
+  if (!["paysim_stream", "paysim"].includes(graph)) throw new Error("Use --graph paysim_stream (replay) or --graph paysim (batch).");
   const env = config();
-  const proxyUrl = `http://127.0.0.1:${env.PROXY_PORT || "9081"}/api/age/${proxyProject}`;
+  const target: NativeTarget = {host: "127.0.0.1", port: Number(env.AGE_PORT || 5455), database: "kineviz", graph};
   let projects: Project[] | undefined;
   if (url) { url = url.replace(/\/+$/, ""); projects = await projectsAt(url); }
   else {
@@ -157,13 +163,13 @@ export async function dashboardCommand(args: string[]): Promise<void> {
     }
   }
   if (!url || !projects) throw new Error("No running Kineviz Desktop found. Start it, or use --url http://host:port.");
-  const project = chooseProject(projects, proxyUrl, projectId);
+  const project = chooseProject(projects, target, projectId);
   const spec = JSON.parse(readFileSync(specFile, "utf8")) as DashboardSpec;
   const result = await installDashboard(url, project._id, spec);
   const output = {...result, projectId: project._id, projectName: project.projectName, title: spec.title, url};
-  const nextStep = proxyProject === "paysim-stream"
+  const nextStep = graph === "paysim_stream"
     ? "For a fresh two-minute replay: ./gxr stream reset --yes, then DEMO_TIME=120 ./gxr stream up."
-    : "For the live replay, connect a project to paysim-stream. Batch totals stay steady.";
+    : "For the live replay, connect an Apache AGE project to graph paysim_stream. Batch totals stay steady.";
   if (json) console.log(JSON.stringify(output));
   else console.log(`Installed and verified “${spec.title}” in “${project.projectName}”.\nOpen Dashboard in the left rail → ${spec.title}. Reopen the library if it was already open.\nProject file: ${result.path}${result.backup ? `\nPrevious version backed up at ${result.backup}.*` : ""}\nPanels refresh every 2–10 seconds through this project's AGE connection. ${nextStep}`);
 }

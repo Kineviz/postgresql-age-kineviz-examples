@@ -78,10 +78,11 @@ generated fixture while the stream is running.
 ./gxr connect up paysim-stream
 ```
 
-Create or update a **Database Proxy** project using the printed API URL,
-`http://127.0.0.1:9081/api/age/paysim-stream`, and `PROXY_API_KEY` from `.env`.
-This registration reads **`paysim_stream`**. The existing `paysim-schemaless`
-registration continues to read the separate batch graph.
+Create or update an **Apache AGE** project using the printed PostgreSQL fields:
+host `127.0.0.1`, port `5455` (or `AGE_PORT`), database `kineviz`, Graph Name
+`paysim_stream`, username `kineviz_native_reader`, and `KINEVIZ_NATIVE_PASSWORD`
+from `.env`. The native connector reads the stream graph directly; batch `paysim`
+remains separate. [Migration from a proxy project](../connect/README.md#migrate-an-existing-database-proxy-project).
 
 ```bash
 ./demos/paysim-schemaless/scripts/install-dashboard.sh

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {test} from "node:test";
 import {resetReplayState, resetStreamCommand} from "../src/stream-reset.ts";
 import type {ResetDatabase, ResetKafka} from "../src/stream-reset.ts";
-import {proxyTarget} from "../src/connect.ts";
+import {connectionTarget} from "../src/connect.ts";
 
 function fixture(options: {active?: boolean; kafkaFail?: boolean; wrongOffset?: boolean; sqlFail?: boolean; owned?: boolean} = {}) {
   const statements: string[] = [];
@@ -45,8 +45,8 @@ test("SQL failure rolls back and successful reset commits only the replay tables
   const ok = fixture(); await resetReplayState(ok.db, ok.kafka); assert.equal(ok.statements.at(-1), "COMMIT");
   assert.ok(!ok.statements.some(s => /CASCADE|DROP|paysim\./.test(s)));
 });
-test("replay proxy target is separate from the preserved batch registration", () => {
-  assert.equal(proxyTarget("paysim-stream").graph, "paysim_stream");
-  assert.equal(proxyTarget("paysim-schemaless").graph, "paysim");
-  assert.throws(() => proxyTarget("arbitrary-graph"));
+test("replay native graph target is separate from the preserved batch graph", () => {
+  assert.equal(connectionTarget("paysim-stream").graph, "paysim_stream");
+  assert.equal(connectionTarget("paysim-schemaless").graph, "paysim");
+  assert.throws(() => connectionTarget("arbitrary-graph"));
 });

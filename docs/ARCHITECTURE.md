@@ -5,8 +5,7 @@ flowchart LR
   G[Seeded fixture generators] --> A[TypeScript data adapter]
   A --> P[PostgreSQL + AGE]
   Q[SQL wrapping openCypher] --> P
-  P --> X[Kineviz database proxy + AGE driver]
-  X --> K[Kineviz graph canvas]
+  P --> K[Kineviz native Apache AGE connector and graph canvas]
   P --> T[Optional SQL Mapping Editor]
   P --> C[CSV snapshot]
   G --> R[Payment replay]
@@ -17,7 +16,7 @@ flowchart LR
 
 All three batch graphs share the `kineviz` database but occupy separate AGE
 schemas. `_key` is the stable external identity used by the importer and exports;
-The proxy uses AGE's internal graph IDs as exact decimal strings for live
+The native connector uses AGE's internal graph IDs as exact decimal strings for live
 expansion; these are not portable across a graph drop/reload. Vertex keys include
 their category to avoid collisions between different entity types. Transfer
 edges carry independent keys, so parallel payments survive.
@@ -65,8 +64,8 @@ observed server and extension versions.
 - Filter `type(edge) IN [...]` when matching several relationship labels; the
   pinned release does not accept `[:TYPE_A|TYPE_B]` alternation syntax.
 - AGE 1.6 can execute `SET` against an existing node despite the reader session's
-  read-only setting. The proxy additionally rejects mutation/procedure clauses
-  before execution. Do not treat a read-only preference alone as an AGE write guard.
+  read-only setting. Keep database writes disabled in the Kineviz project; the native connector
+  guards the inner Cypher as well as SQL wrappers before execution. Do not treat a read-only preference alone as an AGE write guard.
 - SQL casts of `graphid` go through `text` before `bigint`; graph IDs and integers
   beyond JavaScript's safe integer range are transmitted as strings.
 - AGE properties are flexible maps. Labels have backing tables and are not

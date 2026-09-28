@@ -7,6 +7,7 @@ import {countsQuery, cypher, identifier, loadStatements, sqlString} from "./age.
 import {config, compose, generated, root, rows, run, sql, start} from "./runtime.ts";
 import {csvRows} from "./csv.ts";
 import {connectCommand} from "./connect.ts";
+import {connectCommand as legacyProxyCommand} from "./legacy-proxy.ts";
 import {dashboardCommand} from "./dashboard.ts";
 import {resetStreamCommand} from "./stream-reset.ts";
 import {streamStatusCommand} from "./stream-status.ts";
@@ -69,8 +70,7 @@ function verify(demo: Demo): void {
   console.log(`Verified ${demo}: ${actual.vertices} vertices, ${actual.edges} edges; all analytical and canvas queries passed.`);
 }
 function connect(demo: Demo): void {
-  const env = config();
-  console.log(`For a live graph connection: ./gxr connect up ${demo}\nChoose Database Proxy in Kineviz and use the URL that command prints.\nOptional SQL panel server: 127.0.0.1:${env.AGE_PORT || "5455"}; database kineviz; user kineviz_reader.\nSQL password: KINEVIZ_PASSWORD in .env. See connect/README.md.`);
+  console.log(`For a native Apache AGE connection: ./gxr connect up ${demo}\nThis verifies the database reader and prints the Desktop connection fields. See connect/README.md.`);
 }
 function exportGraph(demo: Demo): void {
   const graph = demos[demo].graph, dir = join(root, "exports", demo);
@@ -115,7 +115,7 @@ function stream(action: string | undefined): void {
 async function main(): Promise<void> {
   const [command, arg, extra] = process.argv.slice(2);
   if (!command || command === "help" || command === "--help") {
-    console.log("gxr list | up <demo> | verify <demo> | query <demo> <file.sql> | export <demo>\n    connect up <demo|paysim-stream> | connect status [demo|paysim-stream] | connect down\n    dashboard install [projectId] [--url http://host:port]\n    generate <demo> | down <demo> --yes | db start|status|stop | stream prepare|up|status|down|reset --yes"); return;
+    console.log("gxr list | up <demo> | verify <demo> | query <demo> <file.sql> | export <demo>\n    connect up <demo|paysim-stream> | connect status [demo|paysim-stream]\n    proxy up|status|down [demo|paysim-stream] (legacy only)\n    dashboard install [projectId] [--url http://host:port] [--graph paysim_stream|paysim]\n    generate <demo> | down <demo> --yes | db start|status|stop | stream prepare|up|status|down|reset --yes"); return;
   }
   if (command === "list") { for (const [slug, demo] of Object.entries(demos)) console.log(`${slug}: ${demo.title}`); return; }
   if (command === "db") {
@@ -126,7 +126,7 @@ async function main(): Promise<void> {
     return;
   }
   if (command === "dashboard") {
-    if (arg !== "install") throw new Error("Use ./gxr dashboard install [projectId] [--url http://host:port]");
+    if (arg !== "install") throw new Error("Use ./gxr dashboard install [projectId] [--url http://host:port] [--graph paysim_stream|paysim]");
     await dashboardCommand(process.argv.slice(4)); return;
   }
   if (command === "stream") {
@@ -134,6 +134,7 @@ async function main(): Promise<void> {
     if (arg === "reset") resetStreamCommand(extra); else stream(arg);
     return;
   }
+  if (command === "proxy") { await legacyProxyCommand(arg, extra); return; }
   if (command === "connect" && ["up", "status", "down"].includes(arg)) { await connectCommand(arg, extra); return; }
   const demo = demoName(arg), graph = demos[demo].graph;
   if (command === "generate") { const data = dataFor(demo); console.log(`${data.vertices.length} vertices, ${data.edges.length} edges → .generated/${demo}/graph.json`); }

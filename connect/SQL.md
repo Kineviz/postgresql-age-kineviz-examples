@@ -2,7 +2,7 @@
 
 Create a project without a graph database connection, then open **Query → SQL →
 PostgreSQL**. The SQL panel is a separate route that requires Mapping Editor.
-For live graph queries and expansion, use [Database Proxy](README.md).
+For live graph queries and expansion, use [native Apache AGE](README.md).
 
 | Field | Value |
 |---|---|

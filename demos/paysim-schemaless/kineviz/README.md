@@ -3,22 +3,23 @@
 [`paysim-live.dashboard.json`](paysim-live.dashboard.json) adapts the original
 [Spanner PaySim dashboard](https://github.com/Kineviz/spanner-omni-kineviz-examples/blob/6bc61f017e0a0170f37edf51449ed76447df3ec7/demos/paysim-schemaless/kineviz/paysim-live.dashboard.json)
 (MIT, Copyright 2026 Kineviz, Inc.). All ten database sources now use AGE
-openCypher through Database Proxy. The 14 widgets include payment totals, value
+openCypher through the native Apache AGE connector. The 14 widgets include payment totals, value
 and fraud-labelled value, daily activity, shared-identity transfer evidence,
 recipient rankings, amount bands, merchant destinations, and canvas selection.
 
 ## Install into Kineviz Desktop
 
-Start the example and its proxy from the repository root:
+Prepare the example and native reader from the repository root:
 
 ```bash
 ./gxr stream prepare
 ./gxr connect up paysim-stream
 ```
 
-Create or open a **Database Proxy** project in Kineviz Desktop connected to
-`http://127.0.0.1:9081/api/age/paysim-stream` (use your configured proxy port).
-The API key is `PROXY_API_KEY` in your private `.env`.
+Create or open an **Apache AGE** project in Kineviz Desktop. Use host
+`127.0.0.1`, port `5455` (or `AGE_PORT`), database `kineviz`, Graph Name
+`paysim_stream`, username `kineviz_native_reader`, and `KINEVIZ_NATIVE_PASSWORD`
+from your private `.env`. See the [connection guide](../../../connect/README.md).
 Then run, from the repository root:
 
 ```bash
@@ -26,7 +27,7 @@ Then run, from the repository root:
 ```
 
 The installer detects Desktop's saved port and the project connected to this
-AGE endpoint. It saves the dashboard and registers it in the project's library,
+native host, port, database and graph. It saves the dashboard and registers it in the project's library,
 following the original Spanner installer's Files API workflow. It does not create
 or change a database connection. No `npm install` is needed; Node.js 22.18+ is enough.
 
@@ -43,7 +44,7 @@ For an explicit project/server, or machine-readable output:
 ```
 
 `KINEVIZ_URL` is equivalent to `--url`. The project ID is the segment after `/p/`
-in the project's URL. If multiple projects use this endpoint, the installer asks
+in the project's URL. If multiple projects use this database and graph, the installer asks
 for an explicit ID rather than choosing an unrelated active project. It requires
 the local Desktop project API to be accessible; it does not bypass login on a
 remote Kineviz server.
@@ -58,8 +59,7 @@ KPIs, daily activity, and amount bands refresh every **2 seconds**; investigatio
 queries refresh every **10 seconds**. They query the entire connected graph,
 independently of the nodes currently on the canvas.
 
-The installer defaults to **`paysim-stream`**, the dedicated proxy registration
-for **`paysim_stream`**. Once the dashboard is open, start payments with:
+The installer defaults to Graph Name **`paysim_stream`** on a native Apache AGE project. Once the dashboard is open, start payments with:
 
 ```bash
 DEMO_TIME=120 ./gxr stream up
@@ -84,10 +84,10 @@ Existing nodes already loaded on the canvas are snapshots; reset does not remove
 those or saved views. Database dashboard panels refresh independently.
 
 For a dashboard over the completed **batch** graph, connect a project to
-`/api/age/paysim-schemaless` and install explicitly:
+Graph Name `paysim` and install explicitly:
 
 ```bash
-./demos/paysim-schemaless/scripts/install-dashboard.sh --proxy-project paysim-schemaless
+./demos/paysim-schemaless/scripts/install-dashboard.sh --graph paysim
 ```
 
 Batch totals stay steady. A completed replay also stays complete until reset;
@@ -112,7 +112,6 @@ errors and malformed existing manifests stop installation rather than erase the
 library.
 
 If widgets report a query or connection error, run
-`./gxr connect status paysim-stream` and check the project's API URL and key.
-This file requires a Kineviz build supporting version 2.1 dashboards; the rendered
-check used the local Desktop 0.19.0 development build documented in
+`./gxr connect status paysim-stream` and check the project's native database fields.
+This file requires a Kineviz build supporting version 2.1 dashboards; current native verification and the earlier proxy-based check are recorded in
 [VALIDATION.md](../../../docs/VALIDATION.md).

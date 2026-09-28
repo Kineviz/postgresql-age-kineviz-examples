@@ -34,12 +34,13 @@ container, generates the data, creates the graph in a transaction, and verifies
 the expected findings. Repeating it preserves an existing owned graph and checks
 it again. It does not silently reset changes you made.
 
-PostgreSQL listens only on **127.0.0.1:5455**. `connect up` starts the pinned
-Kineviz database proxy with an AGE driver on **127.0.0.1:9081**, registers the
-graph, verifies it, and prints the API URL. In Kineviz, choose **Database Proxy**
-and use that URL plus `PROXY_API_KEY` from `.env`. Cypher results become nodes
-and edges directly, with schema discovery and neighborhood expansion.
-See the [complete connection instructions](connect/README.md).
+PostgreSQL listens only on **127.0.0.1:5455**. `connect up` prepares and verifies
+a restricted native reader and prints the connection fields. In Kineviz choose
+**New project → Your database → Apache AGE**, with database `kineviz`, the printed
+graph name, username `kineviz_native_reader`, and `KINEVIZ_NATIVE_PASSWORD` from
+`.env`. Cypher results become nodes and edges directly, with schema discovery
+and neighborhood expansion. No Database Proxy or API key is needed.
+See the [complete connection and migration instructions](connect/README.md).
 
 ## Demos
 
@@ -64,7 +65,7 @@ rows. CSV export also includes the complete graph, including isolated vertices.
 |---|---|
 | Spanner Omni container and CLI | Official PostgreSQL 16 + AGE 1.6 image, pinned by multi-architecture digest |
 | `CREATE PROPERTY GRAPH`, GoogleSQL/GQL | `create_graph`, AGE label tables, openCypher in `cypher()` |
-| Spanner database proxy | Same upstream proxy, pinned with an AGE driver; CSV alternative |
+| Spanner database proxy | Native Apache AGE connector over the PostgreSQL wire; CSV alternative |
 | Dynamic-label node/edge tables | AGE labels and flexible `agtype` property maps |
 | Kafka → Spanner sink | Kafka → PostgreSQL transaction + AGE graph mutation |
 | Preview expiry and Spanner resource limits | Normal persistent PostgreSQL volume; no Spanner expiry |
@@ -74,10 +75,10 @@ creates a PostgreSQL table for each label; it does **not** reproduce Spanner's
 single dynamic node table and single dynamic edge table. New properties need no
 column migration. A new label creates a new backing relation.
 
-Kineviz's PostgreSQL **property-graph** connector uses SQL/PGQ (`GRAPH_TABLE`),
-which is a different interface. This repo connects AGE through Database Proxy; it does not add a native AGE
-connector. The [PaySim dashboard](demos/paysim-schemaless/kineviz/) is adapted
-with AGE queries; the original Spanner project archive is not reused. An optional
+Choose Kineviz's **Apache AGE** connector, which uses openCypher. The separate
+PostgreSQL **SQL/PGQ** option uses `GRAPH_TABLE` and is not the AGE interface.
+The [PaySim dashboard](demos/paysim-schemaless/kineviz/) is adapted with AGE
+queries; the original Spanner project archive is not reused. An optional
 [SQL panel route](connect/SQL.md) remains available for tabular results.
 
 ## Commands
@@ -91,7 +92,6 @@ with AGE queries; the original Spanner project archive is not reused. An optiona
 ./gxr export paysim-schemaless
 ./gxr connect up paysim-schemaless
 ./gxr connect status paysim-schemaless
-./gxr connect down                  # stops only the proxy
 ./gxr db status
 ./gxr db stop                       # stops PostgreSQL; keeps data
 ./gxr db start                      # resumes it
@@ -104,15 +104,15 @@ reserved demo name is refused rather than replaced.
 
 ## PaySim dashboard
 
-Prepare and register the replay graph:
+Prepare the replay graph and native connection:
 
 ```bash
 ./gxr stream prepare
 ./gxr connect up paysim-stream
 ```
 
-Connect a Database Proxy project in Desktop to the printed `paysim-stream` URL,
-then install its dashboard:
+Create an **Apache AGE** project in Desktop with Graph Name **`paysim_stream`**,
+using the printed fields, then install its dashboard:
 
 ```bash
 ./demos/paysim-schemaless/scripts/install-dashboard.sh
@@ -164,16 +164,17 @@ npm run typecheck
 npm test
 npm run test:integration             # requires Docker; loads all three demos
 npm run test:stream                  # Kafka replay + complete graph comparison
-npm run test:proxy                   # proxy API + graph operations on all demos
+npm run test:native                  # native TCP reader + graph/schema queries
 npm run test:dashboard               # ten dashboard queries + empty replay state
 npm run test:reset                   # reset/replay in an isolated Docker deployment
 ```
 
 The CLI, loaders, streaming runtime, and integration tests are TypeScript and
-run directly under Node's type stripping. The small drop-in AGE proxy driver is
-Python because the upstream proxy requires that interface. The three unmodified Python generators are attributed, MIT-licensed
+run directly under Node's type stripping. The three unmodified Python generators are attributed, MIT-licensed
 fixtures from the source repository. See [vendor/README.md](vendor/README.md).
-CI runs the unit and database integration checks. See [CONTRIBUTING.md](CONTRIBUTING.md),
+CI runs unit, database, native-connection, dashboard and replay checks.
+The former proxy is retained as an [opt-in legacy route](connect/LEGACY-PROXY.md);
+it is not started by the native setup. See [CONTRIBUTING.md](CONTRIBUTING.md),
 [AGENTS.md](AGENTS.md), and [troubleshooting](docs/TROUBLESHOOTING.md).
 
 ## References

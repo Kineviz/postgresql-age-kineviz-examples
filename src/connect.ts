@@ -1,97 +1,84 @@
 import {appendFileSync} from "node:fs";
 import {createHash, randomBytes} from "node:crypto";
 import {join} from "node:path";
-import {config, root, rows, run, sql} from "./runtime.ts";
-import {identifier, sqlString} from "./age.ts";
+import {config, root, rows, sql, compose} from "./runtime.ts";
+import {cypher, identifier, sqlString} from "./age.ts";
 import {demoName, demos} from "./model.ts";
 
-export function proxyTarget(slug?: string): {project: string; graph: string; prepare: string} {
-  if (slug === "paysim-stream") return {project: slug, graph: "paysim_stream", prepare: "./gxr stream prepare"};
+export const nativeUser = "kineviz_native_reader";
+export function connectionTarget(slug?: string): {graph: string; prepare: string} {
+  if (slug === "paysim-stream") return {graph: "paysim_stream", prepare: "./gxr stream prepare"};
   const demo = demoName(slug);
-  return {project: demo, graph: demos[demo].graph, prepare: `./gxr up ${demo}`};
+  return {graph: demos[demo].graph, prepare: `./gxr up ${demo}`};
+}
+export function connectionFields(graph: string, env = config()) {
+  return {databaseType: "apacheAge", hostname: "127.0.0.1", boltPort: env.AGE_PORT || "5455",
+    currentNeo4jDB: "kineviz", graphName: identifier(graph), username: nativeUser};
+}
+export function printConnection(graph: string): void {
+  const fields = connectionFields(graph);
+  console.log(`Kineviz → New project → Your database → Apache AGE\nHost: ${fields.hostname}\nPort: ${fields.boltPort}\nDatabase: ${fields.currentNeo4jDB}\nGraph Name: ${fields.graphName}\nUsername: ${fields.username}\nPassword: KINEVIZ_NATIVE_PASSWORD in .env\nKeep database writes disabled in the project.\nQuery: MATCH (n)-[r]->(m) RETURN n, r, m LIMIT 50\nSee connect/README.md.`);
 }
 
-export function proxyCompose(args: string[], inherit = true): string {
-  return run("docker", ["compose", "--project-directory", root, "--env-file", join(root, ".env"),
-    "-f", join(root, "compose.yaml"), "-f", join(root, "connect/compose.yaml"), ...args], undefined, inherit);
+/** Keep the existing SQL/proxy login unchanged. Legacy Desktop credential
+ * detection mistakes long all-hex plaintext for ciphertext; the new native
+ * login's prefixed password works through that save/decrypt boundary. */
+function prepareNativeReader(): void {
+  let env = config();
+  const exists = rows(`SELECT rolname FROM pg_roles WHERE rolname=${sqlString(nativeUser)}`).length > 0;
+  if (!env.KINEVIZ_NATIVE_PASSWORD) {
+    if (exists) throw new Error(`${nativeUser} already exists but KINEVIZ_NATIVE_PASSWORD is missing. Restore its .env value; the role and password have been preserved.`);
+    appendFileSync(join(root, ".env"), `\nKINEVIZ_NATIVE_PASSWORD=age_${randomBytes(24).toString("hex")}\n`);
+    env = config();
+  }
+  if (/^[a-z0-9]{32,}$/.test(env.KINEVIZ_NATIVE_PASSWORD)) {
+    throw new Error("KINEVIZ_NATIVE_PASSWORD resembles legacy Desktop ciphertext. Use a password containing punctuation, such as the generated age_ prefix. Existing credentials were not changed.");
+  }
+  if (!exists) sql(`CREATE ROLE ${nativeUser} LOGIN INHERIT PASSWORD ${sqlString(env.KINEVIZ_NATIVE_PASSWORD)};`);
+  sql(`GRANT kineviz_reader TO ${nativeUser};
+    ALTER ROLE ${nativeUser} SET default_transaction_read_only=on;
+    ALTER ROLE ${nativeUser} SET search_path=ag_catalog,public;`);
 }
-export function proxyBase(): string { return `http://127.0.0.1:${config().PROXY_PORT || "9081"}`; }
-export async function proxyRequest(path: string, body?: unknown, adminToken?: string): Promise<unknown> {
-  const response = await fetch(`${proxyBase()}${path}`, {
-    method: body === undefined ? "GET" : "POST",
-    // Lifecycle checks can recreate the container between calls. Do not reuse
-    // a keepalive socket from the previous proxy process after a successful up.
-    headers: {"Content-Type": "application/json", "Connection": "close", "X-API-Key": config().PROXY_API_KEY,
-      ...(adminToken ? {"X-Admin-Token": adminToken} : {})},
-    body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(60_000),
-  });
-  const bodyText = await response.text();
-  let payload: {success?: boolean; error?: string; detail?: string};
-  try { payload = JSON.parse(bodyText) as typeof payload; }
-  catch { throw new Error(`Proxy ${path}: HTTP ${response.status}; inspect the proxy logs`); }
-  if (!response.ok || payload.success === false) throw new Error(`Proxy ${path}: ${payload.error || payload.detail || response.status}`);
-  return payload;
+
+/** Use the Compose service address: PostgreSQL's local socket and localhost
+ * rules may trust without checking a password. The password travels over stdin, never in CLI output or argv. */
+export function nativeSql(query: string): string {
+  const password = config().KINEVIZ_NATIVE_PASSWORD;
+  if (!password || /[\r\n]/.test(password)) throw new Error("Run ./gxr connect up <demo> to prepare the native reader.");
+  return compose(["exec", "-T", "db", "sh", "-c",
+    `IFS= read -r PGPASSWORD; export PGPASSWORD; exec psql -X -qAt -v ON_ERROR_STOP=1 -h db -U ${nativeUser} -d kineviz`], `${password}\n${query}\n`);
 }
-export async function checkProxy(project: string): Promise<void> {
-  const path = `/api/age/${encodeURIComponent(project)}`;
-  await proxyRequest(`${path}/test`, {});
-  const schema = await proxyRequest(`${path}/graphSchema`) as {data: {categories: {name: string}[]; relationships: unknown[]}};
-  if (!schema.data.categories.length) throw new Error("The proxy discovered no vertex labels. Load the graph first.");
-  const result = await proxyRequest(`${path}/query`, {query: "MATCH (n) RETURN n LIMIT 1"}) as {data: {type: string; data: {nodes?: unknown[]}}};
-  if (result.data.type !== "GRAPH" || !result.data.data.nodes?.length) throw new Error("The proxy did not return a graph node.");
-  console.log(`Verified proxy → AGE: ${schema.data.categories.map(c => c.name).join(", ")}; query returned a graph node.`);
+export function checkNative(graph: string): void {
+  const port = connectionFields(graph).boltPort;
+  if (compose(["port", "db", "5432"]).trim() !== `127.0.0.1:${port}`) {
+    throw new Error("The running database port does not match AGE_PORT on loopback. Run ./gxr db start, then retry connect.");
+  }
+  const extension = nativeSql("SELECT extversion FROM pg_extension WHERE extname='age';").trim();
+  if (!extension) throw new Error("AGE is not installed in database kineviz.");
+  const labels = nativeSql(`SELECT count(*) FROM ag_catalog.ag_label WHERE graph=(SELECT graphid FROM ag_catalog.ag_graph WHERE name=${sqlString(graph)});`).trim();
+  const node = nativeSql(`${cypher(graph, "MATCH (n) RETURN n LIMIT 1")};`).trim();
+  if (!node.includes("::vertex")) throw new Error(`No vertex returned by ${graph}. Load the demo first.`);
+  console.log(`Verified native reader → PostgreSQL / AGE ${extension}: ${graph}, ${labels} labels, graph query returned a vertex.`);
 }
 export async function connectCommand(action: string | undefined, slug?: string): Promise<void> {
-  if (action === "down") {
-    proxyCompose(["stop", "proxy"]);
-    console.log("Proxy stopped; PostgreSQL, graphs, and proxy registrations are preserved."); return;
-  }
-  if (action === "status") {
-    proxyCompose(["ps", "proxy"]);
-    if (slug) await checkProxy(proxyTarget(slug).project);
-    return;
-  }
-  if (action !== "up") throw new Error("Use ./gxr connect up <demo> | status [demo] | down");
-  const {project, graph, prepare} = proxyTarget(slug);
-  if (!rows(`SELECT graph FROM public.demo_registry WHERE graph=${sqlString(graph)}`).length) {
-    throw new Error(`Load the owned demo first: ${prepare}`);
-  }
-  // AGE creates the parent's primary key but does not index the child labels.
-  // Canvas traversals join by ID/endpoints, not the fixture's property keys.
-  const labels = rows(`SELECT name, kind FROM ag_catalog.ag_label WHERE graph=(SELECT graphid FROM ag_catalog.ag_graph WHERE name=${sqlString(graph)}) AND name NOT IN ('_ag_label_vertex', '_ag_label_edge')`);
-  for (const label of labels) {
-    const table = `"${identifier(graph)}"."${identifier(String(label.name))}"`;
-    for (const column of label.kind === "e" ? ["id", "start_id", "end_id"] : ["id"]) {
-      const index = `age_proxy_${createHash("sha256").update(`${label.name}:${column}`).digest("hex").slice(0, 16)}`;
-      sql(`CREATE INDEX IF NOT EXISTS "${index}" ON ${table} (${column});`);
-    }
-    sql(`ANALYZE ${table};`);
-  }
-  let env = config();
-  // Add only missing keys; never replace existing passwords or other settings.
-  for (const key of ["PROXY_API_KEY", "PROXY_ADMIN_PASSWORD"]) {
-    if (!env[key]) {
-      // Older Kineviz builds mistake long alphanumeric API keys for encrypted
-      // values when saving a project. The prefix avoids that legacy heuristic.
-      const prefix = key === "PROXY_API_KEY" ? "gxr_" : "";
-      appendFileSync(join(root, ".env"), `\n${key}=${prefix}${randomBytes(24).toString("hex")}\n`);
+  if (action === "down") throw new Error("Native AGE has no proxy service to stop. Use ./gxr db stop to stop PostgreSQL, or ./gxr proxy down for a legacy proxy.");
+  if (action === "status" && !slug) { console.log(compose(["ps", "db"])); return; }
+  if (action !== "up" && action !== "status") throw new Error("Use ./gxr connect up <demo|paysim-stream> | status [demo|paysim-stream]");
+  const {graph, prepare} = connectionTarget(slug);
+  if (!rows(`SELECT graph FROM public.demo_registry WHERE graph=${sqlString(graph)}`).length) throw new Error(`Load the owned demo first: ${prepare}`);
+  if (action === "up") {
+    prepareNativeReader();
+    // Reuse former index names to avoid duplicate indexes on migrated graphs.
+    const labels = rows(`SELECT name, kind FROM ag_catalog.ag_label WHERE graph=(SELECT graphid FROM ag_catalog.ag_graph WHERE name=${sqlString(graph)}) AND name NOT IN ('_ag_label_vertex', '_ag_label_edge')`);
+    for (const label of labels) {
+      const table = `"${identifier(graph)}"."${identifier(String(label.name))}"`;
+      for (const column of label.kind === "e" ? ["id", "start_id", "end_id"] : ["id"]) {
+        const index = `age_proxy_${createHash("sha256").update(`${label.name}:${column}`).digest("hex").slice(0, 16)}`;
+        sql(`CREATE INDEX IF NOT EXISTS "${index}" ON ${table} (${column});`);
+      }
+      sql(`ANALYZE ${table};`);
     }
   }
-  env = config();
-  proxyCompose(["up", "-d", "--build", "--wait", "--no-deps", "proxy"]);
-  const login = await proxyRequest("/api/admin/login", {password: env.PROXY_ADMIN_PASSWORD}) as {token: string};
-  const projects = await proxyRequest("/api/project/list", undefined, login.token) as {name: string; database_type: string; database_config: {graph_name?: string; database_id?: string; host?: string}}[];
-  const existing = projects.find(p => p.name === project);
-  if (existing) {
-    if (existing.database_type !== "age" || existing.database_config.graph_name !== graph || existing.database_config.database_id !== "kineviz" || existing.database_config.host !== "db") {
-      throw new Error(`Existing proxy project ${project} points elsewhere; preserving it. Review the proxy configuration.`);
-    }
-  } else {
-    await proxyRequest("/api/project/create", {name: project, database_type: "age", database_config: {
-      type: "age", host: "db", port: 5432, database_id: "kineviz", graph_name: graph,
-      username: "kineviz_reader", auth_type: "username_password", options: {password_env: "KINEVIZ_PASSWORD"},
-    }}, login.token);
-  }
-  await checkProxy(project);
-  console.log(`\nKineviz → Create New Project → Database Proxy\nAPI URL: ${proxyBase()}/api/age/${project}\nAPI Key: PROXY_API_KEY in .env\nOpen the Query tab and run: MATCH (n)-[r]->(m) RETURN n, r, m LIMIT 50\nSee connect/README.md.`);
+  checkNative(graph);
+  printConnection(graph);
 }

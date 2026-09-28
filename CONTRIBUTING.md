@@ -5,8 +5,9 @@ reproducible. Each demo needs a graph name, generator adapter, analytical querie
 canvas-friendly SQL queries, a README, and assertions about its planted findings.
 
 Run `npm ci --ignore-scripts`, `npm run typecheck`, `npm test`, and
-`npm run test:integration`. Run `npm run test:proxy` for connection changes. The latter needs Docker and creates all demo graphs;
-it preserves already-registered graphs. Use an isolated Compose project and port
+`npm run test:integration`. Run `npm run test:native` and `npm run test:dashboard` after database integration
+for connection changes. These use Docker and the native restricted reader,
+without a proxy. `npm run test:proxy` is optional coverage for the legacy route. Use an isolated Compose project and port
 if your local examples contain personal work.
 
 Explain compatibility changes against a pinned PostgreSQL/AGE pair. Don't update

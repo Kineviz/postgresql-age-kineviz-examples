@@ -7,15 +7,19 @@ import {chooseProject, installDashboard, mergeManifest, parseManifest, specFile}
 import type {DashboardSpec} from "../src/dashboard.ts";
 
 const spec = JSON.parse(readFileSync(specFile, "utf8")) as DashboardSpec;
-const proxy = "http://127.0.0.1:9081/api/age/paysim-schemaless";
-const project = {_id: "age", projectName: "AGE", hostname: proxy, databaseType: "databaseProxy"};
+const target = {host: "127.0.0.1", port: 5455, database: "kineviz", graph: "paysim_stream"};
+const project = {_id: "age", projectName: "AGE", hostname: "127.0.0.1", databaseType: "apacheAge", boltPort: "5455", currentNeo4jDB: "kineviz", graphName: "paysim_stream"};
 
-test("installer targets the matching AGE connection, rejects wrong/ambiguous projects", () => {
-  assert.equal(chooseProject([{...project, hostname: proxy.replace("127.0.0.1", "localhost") + "/"}], proxy)._id, "age");
-  assert.throws(() => chooseProject([{...project, databaseType: "postgresql"}], proxy), /No project/);
-  assert.throws(() => chooseProject([project], proxy, "unrelated"), /not connected/);
-  assert.throws(() => chooseProject([project, {...project, _id: "other"}], proxy), /Several projects/);
-  assert.equal(chooseProject([project, {...project, _id: "other"}], proxy, "other")._id, "other");
+test("installer matches native host, port, database and graph, never a proxy or batch project", () => {
+  assert.equal(chooseProject([{...project, hostname: "localhost"}], target)._id, "age");
+  assert.equal(chooseProject([{...project, currentDB: "neo4j"}], target)._id, "age");
+  for (const patch of [{databaseType: "databaseProxy"}, {databaseType: "postgresGraph"}, {boltPort: "5432"},
+    {currentNeo4jDB: "other"}, {graphName: "paysim"}, {hostname: "remote"}, {graphName: ""}]) {
+    assert.throws(() => chooseProject([{...project, ...patch}], target), /No project/);
+  }
+  assert.throws(() => chooseProject([project], target, "unrelated"), /not connected/);
+  assert.throws(() => chooseProject([project, {...project, _id: "other"}], target), /Several projects/);
+  assert.equal(chooseProject([project, {...project, _id: "other"}], target, "other")._id, "other");
 });
 test("manifest merge preserves unrelated dashboards, metadata, and explicit false pin values", () => {
   const original = {format: "custom", dashboards: [{id: "unrelated", title: "Keep me"}, {id: spec.id, fav: false, menubar: "", menubarSide: "right", railIcon: "custom", customField: 3}]};
