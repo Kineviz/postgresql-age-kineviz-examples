@@ -16,6 +16,7 @@ export interface Project {
   boltPort?: string | number; port?: string | number; database?: string;
   currentDB?: string; currentNeo4jDB?: string; graphName?: string;
 }
+export interface DashboardAccess {apiKey?: string}
 export interface NativeTarget {host: string; port: number; database: string; graph: string}
 export const specFile = join(root, "demos/paysim-schemaless/kineviz/paysim-live.dashboard.json");
 const indexPath = "dashboards/_index.json";
@@ -60,18 +61,58 @@ export function mergeManifest(existing: Manifest, spec: DashboardSpec, now = Dat
   return {...existing, dashboards: [...existing.dashboards.filter(d => d.id !== spec.id), meta]};
 }
 
+/** Keep credentials out of URLs and never probe unrelated ports with a key. */
+export function normalizeServerUrl(value: string): string {
+  let url: URL;
+  try { url = new URL(value); } catch {
+    throw new Error("Invalid --url. Use a plain URL such as http://127.0.0.1:80, without Markdown [text](url) formatting.");
+  }
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+    throw new Error("Use an http(s) server URL without embedded credentials, a query or a fragment.");
+  }
+  return url.toString().replace(/\/+$/, "");
+}
+function accessHeaders(baseUrl: string, access: DashboardAccess): Record<string, string> {
+  if (!access.apiKey) return {};
+  const url = new URL(normalizeServerUrl(baseUrl));
+  if (url.protocol !== "https:" && !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) {
+    throw new Error("API-key authentication requires HTTPS, except for a local loopback server.");
+  }
+  return {"x-api-key": access.apiKey};
+}
+class AuthenticationError extends Error {}
+async function checkApiResponse(response: Response, baseUrl: string): Promise<void> {
+  // GraphXR can encode authentication failures as HTTP 200 with {status: 401}.
+  // Check both layers before treating a missing content field as missing data.
+  const body: unknown = await response.clone().json().catch(() => null);
+  const status = body && typeof body === "object" && "status" in body ? body.status : undefined;
+  if ([401, 403].includes(response.status) || [401, 403].includes(Number(status)) ||
+      (response.status >= 300 && response.status < 400)) {
+    throw new AuthenticationError(`Kineviz is running at ${baseUrl}, but this request needs authentication or project access. Use --url with KINEVIZ_API_KEY or --api-key-file, or import the dashboard in the signed-in app. The app's login session is not shared with this CLI.`);
+  }
+  if (typeof status === "number" && status !== 0 && status !== 200) {
+    throw new Error(`Kineviz API returned application status ${status}. Existing dashboard files were preserved where possible.`);
+  }
+}
+
 /** Uses the same project Files endpoints as Kineviz's DashboardStore, not upload
  * (which ignores the dashboard subdirectory). Never persist connection secrets. */
-export async function installDashboard(baseUrl: string, projectId: string, spec: DashboardSpec): Promise<{path: string; backup?: string}> {
+export async function installDashboard(baseUrl: string, projectId: string, spec: DashboardSpec, access: DashboardAccess = {}): Promise<{path: string; backup?: string}> {
   if (!/^[a-zA-Z0-9_-]+$/.test(spec.id) || !Array.isArray(spec.widgets) || !Array.isArray(spec.sources)) {
     throw new Error("Invalid dashboard file");
   }
-  const prefix = `${baseUrl.replace(/\/+$/, "")}/api/files/${encodeURIComponent(projectId)}`;
-  const request = (endpoint: string, body?: unknown) => fetch(`${prefix}/${endpoint}`, {
-    method: body === undefined ? "GET" : "POST", redirect: "manual",
-    headers: {"Content-Type": "application/json"},
-    body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(20_000),
-  });
+  baseUrl = normalizeServerUrl(baseUrl);
+  const headers = {"Content-Type": "application/json", ...accessHeaders(baseUrl, access)};
+  const prefix = `${baseUrl}/api/files/${encodeURIComponent(projectId)}`;
+  const request = async (endpoint: string, body?: unknown): Promise<Response> => {
+    const response = await fetch(`${prefix}/${endpoint}`, {
+      method: body === undefined ? "GET" : "POST", redirect: "manual",
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(20_000),
+    });
+    await checkApiResponse(response, baseUrl);
+    return response;
+  };
   const read = async (path: string): Promise<string | null> => {
     const response = await request(`download?path=${encodeURIComponent(`/${path}`)}`);
     if (response.status === 404) return null;
@@ -115,12 +156,23 @@ export async function installDashboard(baseUrl: string, projectId: string, spec:
   return {path: `/${path}`, ...(backup ? {backup: `/${backup}`} : {})};
 }
 
-async function projectsAt(url: string): Promise<Project[]> {
-  const response = await fetch(`${url}/api/graph/neo4j/project/list`, {redirect: "manual", signal: AbortSignal.timeout(4_000)});
+export async function projectsAt(url: string, access: DashboardAccess = {}): Promise<Project[]> {
+  url = normalizeServerUrl(url);
+  const response = await fetch(`${url}/api/graph/neo4j/project/list`, {headers: accessHeaders(url, access), redirect: "manual", signal: AbortSignal.timeout(4_000)});
+  await checkApiResponse(response, url);
   if (!response.ok) throw new Error(`Project API HTTP ${response.status}`);
   const result: unknown = await response.json();
-  if (!result || typeof result !== "object" || !("content" in result) || !Array.isArray(result.content)) throw new Error("No project list returned");
+  if (!result || typeof result !== "object" || !("content" in result) || !Array.isArray(result.content)) throw new Error("Kineviz project API returned an unexpected response (no project list). Check --url points to the Kineviz server.");
   return result.content.filter((p): p is Project => p && typeof p === "object" && typeof p._id === "string" && typeof p.hostname === "string");
+}
+export async function findDesktop(candidates: string[]): Promise<{url: string; projects: Project[]}> {
+  const authErrors: string[] = [];
+  for (const url of candidates) {
+    try { return {url, projects: await projectsAt(url)}; }
+    catch (error) { if (error instanceof AuthenticationError) authErrors.push(error.message); }
+  }
+  if (authErrors.length) throw new Error(authErrors.join("\n"));
+  throw new Error("No running Kineviz Desktop found. Start it, or use --url http://host:port.");
 }
 function desktopUrls(): string[] {
   const ports: unknown[] = [];
@@ -136,36 +188,40 @@ function desktopUrls(): string[] {
 }
 export async function dashboardCommand(args: string[]): Promise<void> {
   let url = process.env.KINEVIZ_URL, projectId: string | undefined, json = false;
+  let apiKey = process.env.KINEVIZ_API_KEY;
   let graph = "paysim_stream";
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--help") {
-      console.log("Usage: ./demos/paysim-schemaless/scripts/install-dashboard.sh [projectId] [--url http://host:port] [--graph paysim_stream|paysim] [--json]"); return;
+      console.log("Usage: ./demos/paysim-schemaless/scripts/install-dashboard.sh [projectId] [--url http://host:port] [--graph paysim_stream|paysim] [--api-key-file PATH] [--json]"); return;
     }
     if (arg === "--json") { json = true; continue; }
-    if (arg === "--url" || arg === "--graph") {
+    if (arg === "--url" || arg === "--graph" || arg === "--api-key-file") {
       const value = args[++i];
       if (!value || value.startsWith("--")) throw new Error(`${arg} requires a value`);
-      if (arg === "--url") url = value; else graph = value;
+      if (arg === "--url") url = value;
+      else if (arg === "--graph") graph = value;
+      else {
+        apiKey = readFileSync(value, "utf8").trim();
+        if (!apiKey) throw new Error("API key file is empty.");
+      }
       continue;
     }
     if (arg.startsWith("-") || projectId) throw new Error(`Unexpected argument: ${arg}`);
     projectId = arg;
   }
   if (!["paysim_stream", "paysim"].includes(graph)) throw new Error("Use --graph paysim_stream (replay) or --graph paysim (batch).");
+  if (apiKey && !url) throw new Error("Set --url (or KINEVIZ_URL) when using an API key; credentials are never sent during port discovery.");
+  if (url) url = normalizeServerUrl(url);
+  const access = {apiKey};
   const env = config();
   const target: NativeTarget = {host: "127.0.0.1", port: Number(env.AGE_PORT || 5455), database: "kineviz", graph};
   let projects: Project[] | undefined;
-  if (url) { url = url.replace(/\/+$/, ""); projects = await projectsAt(url); }
-  else {
-    for (const candidate of desktopUrls()) {
-      try { projects = await projectsAt(candidate); url = candidate; break; } catch { /* next candidate */ }
-    }
-  }
-  if (!url || !projects) throw new Error("No running Kineviz Desktop found. Start it, or use --url http://host:port.");
+  if (url) projects = await projectsAt(url, access);
+  else ({url, projects} = await findDesktop(desktopUrls()));
   const project = chooseProject(projects, target, projectId);
   const spec = JSON.parse(readFileSync(specFile, "utf8")) as DashboardSpec;
-  const result = await installDashboard(url, project._id, spec);
+  const result = await installDashboard(url, project._id, spec, access);
   const output = {...result, projectId: project._id, projectName: project.projectName, title: spec.title, url};
   const nextStep = graph === "paysim_stream"
     ? "For a fresh two-minute replay: ./gxr stream reset --yes, then DEMO_TIME=120 ./gxr stream up."

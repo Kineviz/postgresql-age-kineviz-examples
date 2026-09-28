@@ -1,5 +1,36 @@
 # Verification record
 
+## Authenticated native dashboard install — 2026-09-28
+
+Verified in the running local Desktop development build and its real Files API:
+
+- The unauthenticated project API returned HTTP 200 with `{status: 401}`.
+  The installer now reports login/project-access requirements instead of claiming
+  Desktop is missing. A regression test reproduced the old misleading error.
+- Installation with an existing Kineviz API key succeeded in the native
+  **Postgres AGE** project, connected to `paysim_stream`. Both dashboard files
+  matched on readback. No credential was stored in either file.
+- Opening the actual Dashboard library and dashboard showed all 14 widgets,
+  **12,033 transactions**, **$11.06M** moved, **$321,337** fraud-labelled value,
+  the suspect table, and a rendered daily area chart with fraud stacked on top.
+  The existing completed replay and canvas were preserved; this was not a new
+  timed replay run.
+- TypeScript checking and **27 unit tests** passed. Tests cover authenticated
+  project discovery and Files requests, HTTP-200 login failures, URL validation,
+  and library preservation.
+- Database integration passed for all three demos and 24 SQL queries. All ten
+  dashboard sources matched fixture values and passed the empty-payment check
+  inside a rolled-back temporary graph.
+- All four native graph checks passed. The suite's final no-proxy assertion
+  correctly found the intentionally retained legacy proxy in the user's main
+  deployment, so the complete native suite was rerun successfully in the existing
+  isolated test deployment. Only that test database was stopped afterward.
+
+This Desktop check includes local GraphXR connector fixes for misleading
+extension errors and cached old passwords. This examples repository does not
+ship a patched Desktop application. The earlier migration-only check below
+predates this rendered verification.
+
 ## Native Apache AGE migration — 2026-09-28
 
 Verified on an isolated ARM64 Docker deployment with PostgreSQL **16.10** and

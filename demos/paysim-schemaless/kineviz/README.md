@@ -46,8 +46,26 @@ For an explicit project/server, or machine-readable output:
 `KINEVIZ_URL` is equivalent to `--url`. The project ID is the segment after `/p/`
 in the project's URL. If multiple projects use this database and graph, the installer asks
 for an explicit ID rather than choosing an unrelated active project. It requires
-the local Desktop project API to be accessible; it does not bypass login on a
-remote Kineviz server.
+the local Desktop project API to be accessible; it does not bypass login. Some
+Desktop development builds also require authentication.
+Being signed in inside the app does not sign this command in.
+
+If the installer reports **Kineviz is running … needs authentication**, use an
+existing Kineviz user API key that can access the project (not the PostgreSQL
+password or the old Database Proxy key). Save it in a private file outside the
+repository, restrict that file to your user, and run:
+
+```bash
+./demos/paysim-schemaless/scripts/install-dashboard.sh \
+  --url http://127.0.0.1:80 --api-key-file "$HOME/.kineviz-api-key"
+```
+
+Alternatively, provide the key through the `KINEVIZ_API_KEY` environment variable
+and keep `--url`. The installer sends the key only to that explicit server,
+never during port discovery, and never stores it in the dashboard. Use HTTPS for
+remote servers. A rejected key or insufficient project access stops installation.
+Use a **plain URL** in commands; do not paste Markdown `[http://…](http://…)`.
+If you do not have an API key, use the app's Import action below.
 
 Alternatively, in **Dashboard → Import**, select `paysim-live.dashboard.json` from
 this folder. The JSON contains no server address or credentials: database sources

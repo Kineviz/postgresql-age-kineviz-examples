@@ -78,3 +78,18 @@ receipts prevent duplicate graph writes.
 proxy is still running and no project needs it, use `./gxr proxy down`. These
 commands keep both data volumes. There is intentionally no automatic whole-volume
 destroy command in the demo CLI.
+
+**Dashboard installer says “No running Kineviz Desktop” / “No project list”:**
+older installers hid the app's login-required response. Update the repository and
+use a plain `--url http://127.0.0.1:80` (or the app's actual address). Do not paste
+Markdown `[http://…](http://…)` as the URL. If authentication is required, pass an
+existing Kineviz API key with `--api-key-file PATH` or `KINEVIZ_API_KEY`; both
+require an explicit `--url` or `KINEVIZ_URL`. App/browser login cookies are not
+shared with the CLI. This key is separate from database credentials and the old
+proxy key. Alternatively, import the dashboard JSON in the signed-in app.
+See [dashboard installation](../demos/paysim-schemaless/kineviz/README.md).
+
+**Dashboard installer finds no matching native project:** it defaults to graph
+`paysim_stream` for replay. `./gxr connect up paysim-schemaless` prints the batch
+graph `paysim`; use `--graph paysim` if that is the graph in your project settings.
+The command never changes an existing project's database connection.
